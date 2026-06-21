@@ -1,0 +1,30 @@
+# 编译生成物（绝对不能提交，否则仓库瞬间变几GB）
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+*.ilk
+Debug/
+Release/
+x64/
+x86/
+build/
+cmake-build-*/
+
+# VS Code 个人配置（不要上传，否则换台电脑你的快捷键会覆盖别人的）
+.vscode/
+
+# Qt 相关临时文件
+*.pro.user
+*.autosave
+
+# 点云数据文件（.pcd .ply 通常几百MB，千万不要传进 Git！）
+*.pcd
+*.ply
+*.las
+*.laz
+
+# Windows 资源管理器垃圾
+Thumbs.db
+Desktop.ini
