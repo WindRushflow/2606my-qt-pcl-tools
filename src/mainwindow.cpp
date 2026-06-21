@@ -14,9 +14,6 @@
 #include "mypcl.h"
 
 
-// Temporary alias: old auto-generated class name used in UI -> new MainWindow class
-#define MainWindow MainWindow
-
 // 构造函数
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -104,26 +101,23 @@ MainWindow::MainWindow(QWidget *parent)
     log_timer->start(50); // 每50ms刷新一次
 
 
-	// ====== 自动加载示例点云 ======
+	// ========== 自动加载示例点云 ===========
 	QDir dir(QCoreApplication::applicationDirPath());
 	dir.cdUp();	dir.cdUp();
 	QString path = dir.absoluteFilePath("data/rabbit.pcd");
 	QFileInfo check(path);
-	if (check.exists())
-	{
+	if (check.exists()){
 		current_cloud->clear();
 
-		if (pcl::io::loadPCDFile(path.toStdString(), *current_cloud) == 0)
-		{
+		if (pcl::io::loadPCDFile(path.toStdString(), *current_cloud) == 0){
 			LOG_INFO("Auto load success: " << path.toStdString());
+			showPointCloud();
 		}
-		else
-		{
+		else{
 			LOG_ERROR("Auto load failed.");
 		}
 	}
-	else
-	{
+	else{
 		LOG_ERROR("Default file not found: " << path.toStdString());
 	}
 }
@@ -149,12 +143,10 @@ void MainWindow::loadPointCloud()
 {    
 	QWidget* currentTab = ui.Left_tab->currentWidget();
 
-	if (currentTab == ui.tab_single)
-	{
+	if (currentTab == ui.tab_single){
 		loadSingleCloud();
 	}
-	else if (currentTab == ui.tab_multi)
-	{
+	else if (currentTab == ui.tab_multi){
 		loadMultiCloud();
 	}
 
@@ -196,8 +188,7 @@ void MainWindow::loadSingleCloud()
 		}
 	}
 
-	if (!isload)
-	{
+	if (!isload){
 		// 黄色警告窗口，标题error，内容load error
 		QMessageBox::warning(this, "error", "load error.");
 		return;
@@ -236,30 +227,24 @@ void MainWindow::loadMultiCloud()
 
 
 	// 批量加载
-	for (int i = 0; i < paths.size(); ++i)
-	{
+	for (int i = 0; i < paths.size(); ++i){
 		QString path = paths[i];
 		PointCloudPtr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 		bool ok = false;
 
-		if (path.endsWith(".pcd", Qt::CaseInsensitive))
-		{
-			if (pcl::io::loadPCDFile(path.toStdString(), *cloud) == 0)
-			{
+		if (path.endsWith(".pcd", Qt::CaseInsensitive)){
+			if (pcl::io::loadPCDFile(path.toStdString(), *cloud) == 0){
 				ok = true;
 			}
 		}
 		// 加载 PLY
-		else if (path.endsWith(".ply", Qt::CaseInsensitive))
-		{
-			if (pcl::io::loadPLYFile(path.toStdString(), *cloud) == 0)
-			{
+		else if (path.endsWith(".ply", Qt::CaseInsensitive)){
+			if (pcl::io::loadPLYFile(path.toStdString(), *cloud) == 0){
 				ok = true;
 			}
 		}
 
-		if (ok)
-		{
+		if (ok){
 			m_cloud_list.push_back(cloud);
 			ui.te_log->append(QString::number(i + 1) + ": " + path);
 			LOG_INFO("Loaded: " << path.toStdString());
@@ -309,11 +294,9 @@ void MainWindow::saveSingleCloud()
 
 	int saveCount = 0;
 
-	try
-	{
+	try{
 		// 原始点云
-		if (current_cloud && !current_cloud->empty())
-		{
+		if (current_cloud && !current_cloud->empty()){
 			QString path =
 				exportDir + "/cloud.pcd";
 
@@ -554,8 +537,8 @@ void MainWindow::clearData()
 }
 
 
-void MainWindow::showCloudInfo()
-{
+void MainWindow::showCloudInfo(){
+
 	// 防御检查
 	if (!current_cloud || current_cloud->empty()) {
 		LOG_ERROR("No point cloud available.");
@@ -646,7 +629,8 @@ void MainWindow::removeNaN()
         return;
     }
     mypcl::removeNaN(current_cloud);
-    showCloudInfo(); // 自动刷新信息
+    showCloudInfo();	// 自动刷新信息
+	refreshViewer();	// 自动更新界面
 }
 
 void MainWindow::voxelDownSample()
@@ -668,6 +652,7 @@ void MainWindow::voxelDownSample()
 
     mypcl::doVoxelFilter(current_cloud, leaf);
     showCloudInfo(); // 自动刷新信息
+	refreshViewer();	// 自动更新界面
 }
 
 void MainWindow::uniformFilter()
@@ -689,6 +674,7 @@ void MainWindow::uniformFilter()
 
     mypcl::doUniformSampling(current_cloud, radius);
     showCloudInfo(); // 自动刷新信息
+	refreshViewer();	// 自动更新界面
 }
 
 void MainWindow::passThroughFilter()
@@ -714,6 +700,7 @@ void MainWindow::passThroughFilter()
 
     mypcl::doPassThrough(current_cloud, field.toStdString(), min, max);
     showCloudInfo(); // 自动刷新信息
+	refreshViewer();	// 自动更新界面
 }
 
 void MainWindow::statisticalOutlierRemoval()
@@ -735,6 +722,7 @@ void MainWindow::statisticalOutlierRemoval()
 
     mypcl::doStatisticalOutlierRemoval(current_cloud, k, std);
     showCloudInfo(); // 自动刷新信息
+	refreshViewer();	// 自动更新界面
 }
 
 void MainWindow::radiusOutlierRemoval()
@@ -756,6 +744,7 @@ void MainWindow::radiusOutlierRemoval()
 
     mypcl::doRadiusOutlierRemoval(current_cloud, r, min);
     showCloudInfo(); // 自动刷新信息
+	refreshViewer();	// 自动更新界面
 }
 
 void MainWindow::mlsSmoothProcess()
@@ -787,6 +776,7 @@ void MainWindow::mlsSmoothProcess()
     normal_cloud = norm_cloud;
 
     showCloudInfo(); // 自动刷新信息
+	refreshViewer();	// 自动更新界面
 }
 
 
@@ -1095,6 +1085,7 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 */
 
 // 初始化
+
 void MainWindow::renderThreadFunc()
 {
 	// 创建窗口（第一次启动时）
@@ -1246,8 +1237,37 @@ void MainWindow::updateViewer(PointCloudPtr cloud, NormalCloudPtr normals, Viewe
 	has_pending_data = true;
 }
 
+// 根据当前视图模式刷新可视化窗口（不改变模式）
+void MainWindow::refreshViewer() {
+	if (!current_cloud || current_cloud->empty()) return;
+
+	switch (m_viewer_mode) {
+		case ViewerMode::CLOUD:
+			updateViewer(current_cloud, ViewerMode::CLOUD);
+			break;
+		case ViewerMode::NORMAL:
+			if (normal_cloud && !normal_cloud->empty())
+				updateViewer(current_cloud, normal_cloud, ViewerMode::NORMAL);
+			else
+				updateViewer(current_cloud, ViewerMode::CLOUD); // 降级
+			break;
+		case ViewerMode::MESH:
+			if (mesh && !mesh->polygons.empty())
+				updateViewer(mesh, ViewerMode::MESH);
+			else
+				updateViewer(current_cloud, ViewerMode::CLOUD); // 降级
+			break;
+		default:
+			updateViewer(current_cloud, ViewerMode::CLOUD);
+			break;
+	}
+}
+
 // =============单点云可视化模块=============
 
+/**
+* @brief 显示xyz点云
+*/
 void MainWindow::showPointCloud()
 {
 	if (!current_cloud || current_cloud->empty()) return;

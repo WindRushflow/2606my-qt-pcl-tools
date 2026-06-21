@@ -66,12 +66,8 @@ public:
 	MainWindow(QWidget* parent = nullptr);  // 构造函数
 	~MainWindow();  // 析构函数
 
-    // 全局变量：当前点云
-    PointCloudPtr current_cloud;    
-    NormalCloudPtr normal_cloud;  // 法向量
-    PolygonMeshPtr mesh;    // 网格（重建用）
 
-	// ================ 函数声明 ================
+	// ========================== 函数声明 ===========================
 
 #pragma region 工具栏函数实现
     // ========== 加载与保存 ==========
@@ -225,6 +221,8 @@ public:
      */
     void pushCloudToUndoStack();
 
+
+
 #pragma endregion
 
 
@@ -242,9 +240,9 @@ public:
      */
     void on_btn_preprocess_clicked();
 
-    /**
-     * @brief 多幅点云粗配准（SAC-IA）
-     */
+	/**
+	 * @brief 多幅点云粗配准（SAC-IA）
+	 */
     void on_btn_coarse_clicked();
 
     /**
@@ -252,24 +250,18 @@ public:
      */
     void on_btn_fine_clicked();
 
-    /**
-     * @brief 可视化配准结果
-     */
-    void on_btn_showReg_clicked();
-
 
 #pragma endregion
 
 #pragma  region 可视化
 
-    // 可视化窗口初始化
+    // 初始化=====================
     //void initViewer();
     void renderThreadFunc();
+    void refreshViewer();
 
-    // 单点云可视化
-    /**
-     * @brief 显示xyz点云
-     */
+    // 单点云可视化=================
+    
     void showPointCloud();
 
     /**
@@ -282,7 +274,13 @@ public:
      */
     void showMesh();
 
-    // 多点云可视化
+    // 多点云可视化 TODO:待修改==============
+
+    /**
+     * @brief 可视化配准结果
+     */
+    void on_btn_showReg_clicked();
+
 #pragma endregion
 
 public slots:
@@ -317,6 +315,12 @@ private:
     std::streambuf* old_cout_buf = nullptr;
     std::streambuf* old_cerr_buf = nullptr;
     std::stringstream log_buffer;
+
+    // =================全局数据================
+	// 单点云：当前点云
+	PointCloudPtr current_cloud;
+	NormalCloudPtr normal_cloud;  // 法向量
+	PolygonMeshPtr mesh;    // 网格（重建用）
 
     // 多幅点云配准专用变量
     std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> m_cloud_list; // 加载的所有点云
