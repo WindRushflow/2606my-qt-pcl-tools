@@ -37,6 +37,11 @@ source_group(TREE "${CMAKE_SOURCE_DIR}" FILES ${UI_FILES})
 # 依赖
 # ==============================
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+
+# 优先找到带 Qt 支持的 VTK（含 QVTKOpenGLNativeWidget）
+list(PREPEND CMAKE_PREFIX_PATH "D:/VTK/VTK-9.4.2-Qt")
+find_package(VTK REQUIRED COMPONENTS GUISupportQt)
+
 find_package(PCL REQUIRED)
 
 # ==============================
@@ -72,5 +77,6 @@ target_link_libraries(${PROJECT_NAME}
         Qt6::Widgets
         ${PCL_LIBRARIES}
         ${VTK_LIBRARIES}
+        VTK::GUISupportQt
         debug   E:/sdmcfjwrjsscj/practice/VSCode-C++/PointCloud/2606myPclLib/output/Debug/mypcllib.lib
 )
