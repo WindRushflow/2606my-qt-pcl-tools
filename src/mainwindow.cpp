@@ -122,6 +122,9 @@ MainWindow::MainWindow(QWidget *parent)
 	}
 }
 
+/**
+ * @brief 析构函数，恢复 cout/cerr 重定向，停止渲染线程
+ */
 MainWindow::~MainWindow()
 {
     std::cout.rdbuf(old_cout_buf);
@@ -139,6 +142,9 @@ MainWindow::~MainWindow()
 // =============加载=============
 
 
+/**
+ * @brief 加载入口：根据当前 Tab 切换到单幅或多幅加载
+ */
 void MainWindow::loadPointCloud()
 {    
 	QWidget* currentTab = ui.Left_tab->currentWidget();
@@ -152,6 +158,9 @@ void MainWindow::loadPointCloud()
 
 }
 
+/**
+ * @brief 打开文件对话框，加载单幅 .pcd 或 .ply 点云，清空撤销栈
+ */
 void MainWindow::loadSingleCloud()
 {
 
@@ -203,7 +212,9 @@ void MainWindow::loadSingleCloud()
 
 }
 
-// 加载多幅点云
+/**
+ * @brief 打开多选文件对话框，批量加载多幅点云并清除旧的配准数据
+ */
 void MainWindow::loadMultiCloud()
 {
 	// 多选文件
@@ -258,6 +269,9 @@ void MainWindow::loadMultiCloud()
 #pragma region 保存 
 // =============保存=============
 
+/**
+ * @brief 保存入口：根据当前 Tab 切换到单幅或多幅保存
+ */
 void MainWindow::savePointCloud()
 {
     QWidget* currentTab = ui.Left_tab->currentWidget();
@@ -272,6 +286,9 @@ void MainWindow::savePointCloud()
 	}
 }
 
+/**
+ * @brief 保存单点云：创建时间戳文件夹，保存原始点云 + 法线合并点云 + Mesh
+ */
 void MainWindow::saveSingleCloud()
 {
 	QString baseDir =
@@ -369,6 +386,9 @@ void MainWindow::saveSingleCloud()
 	}
 }
 
+/**
+ * @brief 保存多幅点云：创建时间戳文件夹，保存原始 + 粗配准 + 精配准结果
+ */
 void MainWindow::saveMultiCloud()
 {
 	QString baseDir =
@@ -484,6 +504,9 @@ void MainWindow::saveMultiCloud()
 
 // =============撤销=============
 
+/**
+ * @brief 从撤销栈中恢复上一版本点云，自动刷新信息
+ */
 void MainWindow::undoCloudOperation()
 {
 	// 栈空没法撤销
@@ -506,6 +529,9 @@ void MainWindow::undoCloudOperation()
 
 
 // =============清空=============
+/**
+ * @brief 清空所有点云数据、配准数据和信息栏
+ */
 void MainWindow::clearData()
 {
 	current_cloud->clear();
@@ -537,6 +563,9 @@ void MainWindow::clearData()
 }
 
 
+/**
+ * @brief 捕获 mypcl::printPointCloudBasicInfo 的输出，显示到信息栏
+ */
 void MainWindow::showCloudInfo(){
 
 	// 防御检查
@@ -572,6 +601,9 @@ void MainWindow::showCloudInfo(){
 }
 
 // 完整日志
+/**
+ * @brief 弹窗显示完整运行日志
+ */
 void MainWindow::showFullLog()
 {
 	QMessageBox::information(
@@ -582,6 +614,9 @@ void MainWindow::showFullLog()
 }
 
 // 工具说明
+/**
+ * @brief 弹窗显示软件功能简介
+ */
 void MainWindow::showIntroduction()
 {
 	QString text =
@@ -603,6 +638,9 @@ void MainWindow::showIntroduction()
 }
 
 // 居中显示
+/**
+ * @brief 居中显示（当前版本暂未实现）
+ */
 void MainWindow::centerView()   //TODO
 {
 	QMessageBox::information(
@@ -621,6 +659,9 @@ void MainWindow::centerView()   //TODO
 
 // =============预处理模块=============
 
+/**
+ * @brief 去除点云中的 NaN 点，自动刷新信息与视图
+ */
 void MainWindow::removeNaN()
 {
     pushCloudToUndoStack();
@@ -633,6 +674,9 @@ void MainWindow::removeNaN()
 	refreshViewer();	// 自动更新界面
 }
 
+/**
+ * @brief 体素降采样，用户输入体素大小
+ */
 void MainWindow::voxelDownSample()
 {
     pushCloudToUndoStack();
@@ -655,6 +699,9 @@ void MainWindow::voxelDownSample()
 	refreshViewer();	// 自动更新界面
 }
 
+/**
+ * @brief 均匀采样滤波，用户输入采样半径
+ */
 void MainWindow::uniformFilter()
 {
     pushCloudToUndoStack();
@@ -677,6 +724,9 @@ void MainWindow::uniformFilter()
 	refreshViewer();	// 自动更新界面
 }
 
+/**
+ * @brief 直通滤波，用户选择轴和范围
+ */
 void MainWindow::passThroughFilter()
 {
     pushCloudToUndoStack();
@@ -703,6 +753,9 @@ void MainWindow::passThroughFilter()
 	refreshViewer();	// 自动更新界面
 }
 
+/**
+ * @brief 统计离群点移除，用户输入邻域点数和标准差倍数
+ */
 void MainWindow::statisticalOutlierRemoval()
 {
     pushCloudToUndoStack();
@@ -725,6 +778,9 @@ void MainWindow::statisticalOutlierRemoval()
 	refreshViewer();	// 自动更新界面
 }
 
+/**
+ * @brief 半径离群点移除，用户输入搜索半径和最小点数
+ */
 void MainWindow::radiusOutlierRemoval()
 {
     pushCloudToUndoStack();
@@ -747,6 +803,9 @@ void MainWindow::radiusOutlierRemoval()
 	refreshViewer();	// 自动更新界面
 }
 
+/**
+ * @brief MLS 平滑处理，用户输入搜索半径，同时更新法线
+ */
 void MainWindow::mlsSmoothProcess()
 {
     pushCloudToUndoStack();
@@ -782,6 +841,9 @@ void MainWindow::mlsSmoothProcess()
 
 // ================特征处理模块=================
 
+/**
+ * @brief 法向量估计，用户输入搜索半径
+ */
 void MainWindow::estimateNormal()
 {
     pushCloudToUndoStack();
@@ -802,6 +864,9 @@ void MainWindow::estimateNormal()
     mypcl::computeNormals(current_cloud, normal_cloud, radius);
 }
 
+/**
+ * @brief 法线方向一致化，用户输入 BFS 传播邻域点数
+ */
 void MainWindow::orientNormalConsistent()
 {
     pushCloudToUndoStack();
@@ -820,6 +885,9 @@ void MainWindow::orientNormalConsistent()
     mypcl::alignNormalsConsistently(normal_cloud, current_cloud, k);
 }
 
+/**
+ * @brief 法线向视点（0,0,0）翻转
+ */
 void MainWindow::flipNormalToViewpoint()
 {
     if (!current_cloud || current_cloud->empty() || !normal_cloud || normal_cloud->empty()) {
@@ -830,6 +898,9 @@ void MainWindow::flipNormalToViewpoint()
     mypcl::flipNormalsToViewpoint(normal_cloud, current_cloud, 0, 0, 0);
 }
 
+/**
+ * @brief 法线混乱度评估，输出混乱度数值
+ */
 void MainWindow::evaluateNormalDisorder()
 {
     if (!current_cloud || current_cloud->empty() || !normal_cloud || normal_cloud->empty()) {
@@ -841,6 +912,9 @@ void MainWindow::evaluateNormalDisorder()
 
 // =============== 表面重建 ===============
 
+/**
+ * @brief 贪婪投影三角化重建，用户输入搜索半径
+ */
 void MainWindow::greedyProjectionTriangulation()
 {
     if (!current_cloud || current_cloud->empty() || !normal_cloud || normal_cloud->empty()) {
@@ -862,6 +936,9 @@ void MainWindow::greedyProjectionTriangulation()
     mypcl::greedyProjectionTriangulation(current_cloud, normal_cloud, mesh, radius);
 }
 
+/**
+ * @brief Poisson 泊松重建，用户输入重建深度
+ */
 void MainWindow::poissonReconstruction()
 {
     if (!current_cloud || current_cloud->empty() || !normal_cloud || normal_cloud->empty()) {
@@ -882,6 +959,9 @@ void MainWindow::poissonReconstruction()
     mypcl::poissonReconstruction(current_cloud, normal_cloud, mesh, depth);
 }
 
+/**
+ * @brief 评估重建误差（点云到 Mesh 的距离）
+ */
 void MainWindow::evaluateReconstructionError()
 {
     if (!current_cloud || current_cloud->empty() || !mesh || mesh->polygons.empty()) {
@@ -895,6 +975,9 @@ void MainWindow::evaluateReconstructionError()
 
 // ======================其他======================
 
+/**
+ * @brief 深拷贝当前点云并入撤销栈，超过 20 步则弹出最旧记录
+ */
 void MainWindow::pushCloudToUndoStack()
 {
     if (!current_cloud || current_cloud->empty())
@@ -921,6 +1004,9 @@ void MainWindow::pushCloudToUndoStack()
 
 // 一键预处理（批量：去NaN + 降采样 + 去噪）
 
+/**
+ * @brief 批量预处理：对所有点云执行去 NaN + 体素降采样 + 统计去噪
+ */
 void MainWindow::on_btn_preprocess_clicked()
 {
     if (m_cloud_list.empty())
@@ -946,6 +1032,9 @@ void MainWindow::on_btn_preprocess_clicked()
 }
 
 // 多幅粗配准
+/**
+ * @brief SAC-IA 粗配准，用户输入 FPFH 半径和 SAC 半径
+ */
 void MainWindow::on_btn_coarse_clicked()
 {
     if (m_cloud_list.size() < 2)
@@ -976,6 +1065,9 @@ void MainWindow::on_btn_coarse_clicked()
 }
 
 // 多幅精配准
+/**
+ * @brief ICP 精配准，需先完成粗配准
+ */
 void MainWindow::on_btn_fine_clicked()
 {
     if (m_coarse_accumulated.empty())
@@ -1005,6 +1097,9 @@ void MainWindow::on_btn_fine_clicked()
 }
 
 // 显示配准结果
+/**
+ * @brief 在新线程中打开独立窗口显示配准结果
+ */
 void MainWindow::on_btn_showReg_clicked()
 {
     if (!m_registration_result || m_registration_result->empty())
@@ -1086,6 +1181,9 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 
 // 初始化
 
+/**
+ * @brief 常驻渲染线程：循环检查 pending 数据并更新 PCLVisualizer 窗口
+ */
 void MainWindow::renderThreadFunc()
 {
 	// 创建窗口（第一次启动时）
@@ -1202,6 +1300,9 @@ void MainWindow::renderThreadFunc()
 	viewer_created = false;
 }
 
+/**
+ * @brief 点云数据缓存：深拷贝后传给渲染线程
+ */
 void MainWindow::updateViewer(PointCloudPtr cloud, ViewerMode mode)
 {
 	std::lock_guard<std::mutex> lock(data_mutex);
@@ -1212,6 +1313,9 @@ void MainWindow::updateViewer(PointCloudPtr cloud, ViewerMode mode)
 	has_pending_data = true;
 }
 
+/**
+ * @brief 网格数据缓存：深拷贝后传给渲染线程
+ */
 void MainWindow::updateViewer(PolygonMeshPtr mesh, ViewerMode mode)
 {
 	std::lock_guard<std::mutex> lock(data_mutex);
@@ -1221,6 +1325,9 @@ void MainWindow::updateViewer(PolygonMeshPtr mesh, ViewerMode mode)
 	has_pending_data = true;
 }
 
+/**
+ * @brief 点云+法线数据缓存：深拷贝后传给渲染线程
+ */
 void MainWindow::updateViewer(PointCloudPtr cloud, NormalCloudPtr normals, ViewerMode mode)
 {
 	std::lock_guard<std::mutex> lock(data_mutex);
@@ -1238,6 +1345,9 @@ void MainWindow::updateViewer(PointCloudPtr cloud, NormalCloudPtr normals, Viewe
 }
 
 // 根据当前视图模式刷新可视化窗口（不改变模式）
+/**
+ * @brief 按当前视图模式刷新可视化窗口，不改变模式
+ */
 void MainWindow::refreshViewer() {
 	if (!current_cloud || current_cloud->empty()) return;
 
@@ -1268,6 +1378,9 @@ void MainWindow::refreshViewer() {
 /**
 * @brief 显示xyz点云
 */
+/**
+ * @brief 显示原始点云（更新渲染线程中的点云数据）
+ */
 void MainWindow::showPointCloud()
 {
 	if (!current_cloud || current_cloud->empty()) return;
@@ -1291,6 +1404,9 @@ void MainWindow::showPointCloud()
 	//	}).detach();
 }
 
+/**
+ * @brief 显示法向量点云（点云 + 法线箭头）
+ */
 void MainWindow::showNormalCloud()
 {
 	if (!normal_cloud || normal_cloud->empty()) {
@@ -1328,6 +1444,9 @@ void MainWindow::showNormalCloud()
 	//	}).detach();
 }
 
+/**
+ * @brief 显示 Mesh 网格模型
+ */
 void MainWindow::showMesh()
 {
 	if (!mesh || mesh->polygons.empty()) return;
