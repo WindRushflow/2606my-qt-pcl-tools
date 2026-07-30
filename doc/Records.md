@@ -81,3 +81,36 @@
    - Ninja 生成器未安装
    - **待解决**：需安装 Ninja 或等待 CMake 更新支持 VS 2026 预览版
 
+
+### 2026.7.30
+
+**总结：QVTK 嵌入方案遇到 Qt 6.11 运行时崩溃和 Qt 6.5.3 编译兼容性问题，最终确认 Qt 6.5.3 + VTK 9.4.2 方案可正常创建 QVTKOpenGLNativeWidget。项目文件回退至 v2.0 独立窗口方案。**
+
+1. **实现 QVTK 嵌入改造**：修改 `mainwindow.h/cpp`，将常驻独立窗口方案替换为 QVTKOpenGLNativeWidget 嵌入方案：
+   - 删除渲染线程、mutex 锁、pending 数据缓存等线程安全机制
+   - 用 vtkSmartPointer&lt;vtkRenderer&gt; + vtkGenericOpenGLRenderWindow 初始化 PCLVisualizer
+   - 将 QVTK 创建延迟到 showEvent()，确保 OpenGL 上下文就绪
+   - 用户回退了部分改动，项目代码恢复为 v2.0 独立窗口方案
+
+2. **踩坑：Qt 6.11.0 + VTK 9.4.2 QVTK 运行时崩溃**：
+   - 最小测试（仅 QVTKOpenGLNativeWidget + QApplication）同样崩溃
+   - 错误：`QWidget: Must construct a QApplication before a QWidget`，但确认 QApplication 已成功构造
+   - `QT_OPENGL=desktop` 和 `QT_OPENGL=angle` 均无效
+   - 纯 QWidget 测试正常，排除 Qt / OpenGL 驱动问题
+   - 结论：VTK 9.4.2 的 QVTK 模块与 Qt 6.11.0 存在兼容性问题
+
+3. **尝试 Qt 6.5.3 LTS**：安装 Qt 6.5.3 msvc2019_64（路径 `D:\Qt_\qt6.5.3\6.5.3\msvc2019_64`）
+   - VTK 9.4.2 重新编译时遇到 Qt 6.5.3 头文件中的 `stdext::checked_array_iterator` 问题
+   - 创建兼容头文件 `D:\VTK\fix_msvc_stdext.h`，提供 `stdext::make_checked_array_iterator` stub
+   - 用 `-DCMAKE_CXX_FLAGS="/FI\"D:/VTK/fix_msvc_stdext.h\""` 强制包含
+
+4. **踩坑：Qt 6.5.3 cmake + VTK-Qt 配置冲突**：
+   - VTK 编译时绑定了 Qt 6.5.3，但 cmake 查找 Qt 时会找到系统中安装的 Qt 6.11，导致版本不匹配
+   - CMake 4.4.0-rc1 无法识别 Qt 6.11 的 `_qt_internal_should_include_targets` 命令
+   - 解决：通过 `set(Qt6CoreTools_DIR ...)` 等显式指定 Qt 6.5.3 的工具链路径
+
+5. **关键突破**：Qt 6.5.3 + VTK 9.4.2 最小测试 QVTKOpenGLNativeWidget 创建成功，无崩溃
+   - 输出：`QApplication OK` → `QVTKOpenGLNativeWidget created` → `Widget visible: 1`
+   - VTK 安装不完整（HDF5 模块编译失败导致 cmake --install 中断）
+   - 已手动复制 85 个 DLL 到安装目录 `D:\VTK\VTK-9.4.2-Qt-653`
+
