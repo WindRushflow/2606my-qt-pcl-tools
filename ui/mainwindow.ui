@@ -16,11 +16,11 @@
   <widget class="QWidget" name="centralWidget">
    <layout class="QHBoxLayout" name="horizontalLayout_10">
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,7">
+     <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,8">
       <item>
        <widget class="QTabWidget" name="Left_tab">
         <property name="currentIndex">
-         <number>0</number>
+         <number>1</number>
         </property>
         <widget class="QWidget" name="tab_single">
          <attribute name="title">
@@ -245,15 +245,6 @@
               </property>
              </widget>
             </item>
-            <!-- 拼接按钮暂禁用："点云拼接"语义待重新定义（配准后合并）
-            <item>
-             <widget class="QPushButton" name="btn_Conc">
-              <property name="text">
-               <string>点云拼接合并</string>
-              </property>
-             </widget>
-            </item>
-            -->
             <item>
              <widget class="QGroupBox" name="groupBox_2">
               <property name="title">
@@ -296,15 +287,6 @@
                    </property>
                   </widget>
                  </item>
-                 <!-- 拼接结果按钮暂禁用：与"原始未配准点云"显示等价
-                 <item>
-                  <widget class="QPushButton" name="btn_showCon">
-                   <property name="text">
-                    <string>拼接结果</string>
-                   </property>
-                  </widget>
-                 </item>
-                 -->
                  <item>
                   <widget class="QPushButton" name="btn_showReg_coarse">
                    <property name="text">

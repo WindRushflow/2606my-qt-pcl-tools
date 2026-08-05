@@ -161,6 +161,37 @@ MainWindow::MainWindow(QWidget *parent)
 	else{
 		LOG_ERROR("Default file not found: " << path.toStdString());
 	}
+
+	// ========== 自动加载默认多幅点云（capture 前 3 幅） ===========
+	bool multi_loaded = false;
+	for (int i = 1; i <= 3; ++i)
+	{
+		QString multi_path = dir.absoluteFilePath(
+			QString("data/capture%1.pcd").arg(i, 4, 10, QLatin1Char('0')));
+		QFileInfo multi_check(multi_path);
+		if (multi_check.exists())
+		{
+			PointCloudPtr cloud(new PointCloud);
+			if (pcl::io::loadPCDFile(multi_path.toStdString(), *cloud) == 0)
+			{
+				m_cloud_list.push_back(cloud);
+				ui.listWidget_multi->addItem(multi_check.fileName());
+				multi_loaded = true;
+			}
+			else
+			{
+				LOG_ERROR("Auto load multi failed: " << multi_path.toStdString());
+			}
+		}
+	}
+	if (multi_loaded)
+	{
+		LOG_INFO("Auto load multi clouds: " << m_cloud_list.size() << " frames");
+	}
+	else
+	{
+		LOG_ERROR("Default multi clouds not found in data/.");
+	}
 }
 
 /**

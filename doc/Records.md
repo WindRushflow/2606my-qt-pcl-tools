@@ -114,3 +114,50 @@
    - VTK 安装不完整（HDF5 模块编译失败导致 cmake --install 中断）
    - 已手动复制 85 个 DLL 到安装目录 `D:\VTK\VTK-9.4.2-Qt-653`
 
+
+
+### 2026-08-05
+
+**总结：** 构建 VTK Debug 环境解决 Debug/Release 双 VTK 崩溃；补完项目遗留功能（拼接/居中/多幅列表/耗时统计/默认多幅加载）；历时多轮定位并修复粗配准的两个独立 bug。
+
+1. **项目记忆与项目理解**
+   - 用户将技术栈文档、协作守则存入项目记忆；AI 通读项目全部文档，梳理出「界面层（Qt）→ 逻辑层（mainwindow）→ 算法层（mypcllib 静态库）」的三层架构与 v1.0→v2.0 演进脉络
+   - 知识点：分层架构职责划分；文档体系（README/Frame/RoadMap/Designments/Records）互相咬合的价值
+
+2. **运行崩溃排查：Debug/Release 双 VTK**
+   - 程序启动崩溃（vtkCommonCore-9.4.dll 访问冲突，地址 0x60）
+   - 定位：7.30 加的 VTK-Qt 链接引入 Release 版 VTK，与 PCL Debug 库依赖的 -gd 版 VTK 在同一进程共存 → 双 VTK 实例 → vtkObjectBase 类型信息分裂 → 崩溃
+   - 证据链：git 历史（CMakeLists 何时加 VTK）、CMakeCache（VTK_DIR）、DLL 大小对比、dumpbin /DEPENDENTS（pcl_visualizationd.dll 依赖 -gd）
+   - 知识点：Debug/Release 库混用危害；VTK -gd 后缀含义；dumpbin 查依赖
+
+3. **VTK Debug 版编译（方案 A）**
+   - 补编译 VTK 9.4.2 Debug（保留 QVTK）：-j8 遇 C1060 堆空间不足（15.7GB 内存扛不住 8 个 cl.exe）→ 降 -j2
+   - 踩坑：VTK Debug 命名默认 9.4d，PCL 期望 9.4-gd → 通过 -DCMAKE_DEBUG_POSTFIX=-gd 重配重编
+   - 安装、项目重配、output/Debug 补拷 -gd DLL → 正常运行
+   - 知识点：并行度与内存的关系；VTK Debug 后缀机制（vtkModule.cmake 的 DEBUG_POSTFIX，受 CMAKE_DEBUG_POSTFIX 控制）
+
+4. **遗留功能开发与节奏调整**
+   - AI 一次性写了 4 个功能（拼接/居中/多幅列表/可视化按钮），用户反馈「一次写太多，不喜欢」→ 后续改为小步提交
+   - 拼接按钮因语义与「原始合并」等价被 .ui 注释禁用（保留，待重新定义为「配准后合并」）
+   - 用户在代码中补充了 4 处 connect 中文注释（// 拼接结果可视化 等），已保留
+   - 知识点：功能反馈不明显的常见原因（无变换拼接 = 原样合并）；功能语义设计
+
+5. **粗配准崩溃大追杀（两个独立 bug）**
+   - **Bug A**：预处理后粗配准崩溃（vector subscript out of range）
+     - 排查链：调用栈行号谜（VS「仅我的代码」折叠 + PDB 行号偏移）→ 重编库仍崩 → 加日志发现 resize(3) 后 size()=0（不可能现象）→ 打印容器地址（参数正确、对象干净）→ 最小测试（MSVC 19.51 resize 正常）→ 禁用渲染线程（排除日志竞争）→ **push_back 替代 resize 后稳定**
+     - 结论：疑似 std::vector<Eigen::Matrix4f>（transforms）对齐问题（Eigen 固定大小矩阵需 16 字节对齐，MSVC 19.51 预览版 + resize 路径踩雷），用 push_back 绕开，**根因待深究**
+   - **Bug B**：直接粗配准（未预处理）崩溃
+     - 定位：computeAveragePointDistance 对含 NaN 点云做 KdTree 搜索崩溃（pcl_kdtreed.dll 内）
+     - 修复：pcl::isFinite 跳过 NaN/Inf 点
+   - 知识点：UB（未定义行为）的随机性——加日志改变内存布局会「碰巧」躲过崩溃，是假修复；最小复现测试的价值；NaN 点云对 PCL KdTree 的危害；「仅我的代码」会折叠库调用帧导致调用栈误导
+   - 用户自行执行 git 提交 c21eead（功能版本，无诊断残留）
+
+6. **功能补充与小步交付**
+   - 多幅点云耗时统计（QElapsedTimer：批量预处理/粗配准/精配准）
+   - 多幅点云默认加载（data/capture0001~0003.pcd，与单点云默认加载代码写在一起）
+   - 知识点：可观测性先行（先耗时统计、再针对性优化）
+
+7. **收尾**
+   - 清理全部诊断代码（库的 R1~R4 日志/printf、项目的 BEFORE/AFTER 日志/容器重构造），恢复渲染线程
+   - 完整测试通过：直接/预处理粗配准、多次点击、5 幅加载、可视化窗口恢复
+   - 当前工作区含未提交改动（默认多幅加载 + 最终清理），待提交
