@@ -141,6 +141,7 @@ private:
     std::thread render_thread;
     std::atomic<bool> render_stop{ false };
     std::atomic<bool> viewer_created{ false };  // 标记窗口是否已创建
+    std::atomic<bool> center_view_requested{ false };  // 居中显示请求标志（渲染线程消费）
     pcl::visualization::PCLVisualizer::Ptr persistent_viewer;
 
     // 数据缓存（深拷贝后传给渲染线程）
@@ -176,6 +177,7 @@ private:
     std::vector<Eigen::Matrix4f> m_fine_transforms;                          // 精配准变换矩阵
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr m_registration_result;               // 最终配准结果
+    PointCloudPtr m_concat_result;                     // 点云拼接结果（坐标直接叠加）
 
 protected:
     //void showEvent(QShowEvent* event) override;

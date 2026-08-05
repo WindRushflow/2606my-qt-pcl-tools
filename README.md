@@ -29,23 +29,22 @@
 ├── build/
 ├── data/
 ├── doc/
+│   ├── Designments.md
 │   ├── Frame.md
+│   ├── Records.md
 │   ├── RoadMap.md
-│   ├── functionDesign.md
+│   ├── functionDesign/
 │   └── notes.md
 ├── include/
-│   ├── mainwindow.h
-│   └── new_mainwindow.h
+│   └── mainwindow.h
 ├── output/
 │   ├── Debug/
 │   ├── SingleCloud_20260612_222624/
 │   └── lib/
 ├── src/
 │   ├── main.cpp
-│   ├── mainwindow.cpp
-│   └── new_mainwindow.cpp
+│   └── mainwindow.cpp
 ├── ui/
-│   ├── mainwindow.ui
-│   └── new_mainwindow.ui
+│   └── mainwindow.ui
 ├── CMakeLists.txt
 └── README.md

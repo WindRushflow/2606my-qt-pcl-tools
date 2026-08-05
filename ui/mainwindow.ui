@@ -30,14 +30,14 @@
           <item>
            <widget class="QToolBox" name="toolBox">
             <property name="currentIndex">
-             <number>0</number>
+             <number>2</number>
             </property>
             <widget class="QWidget" name="page_3">
              <property name="geometry">
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>178</width>
+               <width>258</width>
                <height>323</height>
               </rect>
              </property>
@@ -105,7 +105,7 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>178</width>
+               <width>258</width>
                <height>323</height>
               </rect>
              </property>
@@ -152,7 +152,7 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>178</width>
+               <width>258</width>
                <height>323</height>
               </rect>
              </property>
@@ -192,7 +192,7 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>178</width>
+               <width>258</width>
                <height>323</height>
               </rect>
              </property>
@@ -245,6 +245,7 @@
               </property>
              </widget>
             </item>
+            <!-- 拼接按钮暂禁用："点云拼接"语义待重新定义（配准后合并）
             <item>
              <widget class="QPushButton" name="btn_Conc">
               <property name="text">
@@ -252,6 +253,7 @@
               </property>
              </widget>
             </item>
+            -->
             <item>
              <widget class="QGroupBox" name="groupBox_2">
               <property name="title">
@@ -294,6 +296,7 @@
                    </property>
                   </widget>
                  </item>
+                 <!-- 拼接结果按钮暂禁用：与"原始未配准点云"显示等价
                  <item>
                   <widget class="QPushButton" name="btn_showCon">
                    <property name="text">
@@ -301,6 +304,7 @@
                    </property>
                   </widget>
                  </item>
+                 -->
                  <item>
                   <widget class="QPushButton" name="btn_showReg_coarse">
                    <property name="text">
@@ -320,6 +324,16 @@
               </layout>
              </widget>
             </item>
+            <item>
+             <widget class="QListWidget" name="listWidget_multi">
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>100</height>
+               </size>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
          </layout>
@@ -330,7 +344,7 @@
        <widget class="QWidget" name="Right_widget" native="true">
         <layout class="QHBoxLayout" name="horizontalLayout_2">
          <item>
-          <layout class="QVBoxLayout" name="verticalLayout" stretch="7,3">
+          <layout class="QVBoxLayout" name="verticalLayout" stretch="6,4">
            <item>
             <widget class="QWidget" name="widget_viewer" native="true">
              <layout class="QHBoxLayout" name="horizontalLayout_13"/>

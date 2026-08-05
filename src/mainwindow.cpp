@@ -2,7 +2,8 @@
 
 #include <QFileDialog>  // 文件选择框
 #include <QMessageBox>  // 弹出提示框
-#include <QTextStream>  // 
+#include <QTextStream>  //
+#include <QElapsedTimer>  // 耗时统计 
 
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
@@ -30,6 +31,7 @@ MainWindow::MainWindow(QWidget *parent)
     normal_cloud.reset(new pcl::PointCloud<pcl::Normal>);
     mesh.reset(new pcl::PolygonMesh);
     m_registration_result.reset(new PointCloud);
+    m_concat_result.reset(new PointCloud);
 
     // ==================== 工具栏函数 =======================
     // 加载与保存
@@ -78,6 +80,45 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui.btn_preprocess, &QPushButton::clicked, this, &MainWindow::on_btn_preprocess_clicked);
     connect(ui.btn_coarse, &QPushButton::clicked, this, &MainWindow::on_btn_coarse_clicked);
     connect(ui.btn_fine, &QPushButton::clicked, this, &MainWindow::on_btn_fine_clicked);
+
+    // ========== 多幅点云：拼接与结果可视化 ==========
+    // TODO: "点云拼接"暂未定义明确语义（无变换叠加与"原始合并"等价），按钮暂禁用
+    // connect(ui.btn_Conc, &QPushButton::clicked, this, &MainWindow::concatenateClouds);
+    // connect(ui.btn_showCon, &QPushButton::clicked, this, [this]() {		// 拼接结果可视化
+    //     if (!m_concat_result || m_concat_result->empty())
+    //     {
+    //         QMessageBox::warning(this, "警告", "请先执行点云拼接！");
+    //         return;
+    //     }
+    //     updateViewer(m_concat_result, ViewerMode::CONCATENATE);
+    // });
+    connect(ui.btn_showReg_raw, &QPushButton::clicked, this, [this]() {	// 原始多点云可视化
+        if (m_cloud_list.empty())
+        {
+            QMessageBox::warning(this, "警告", "请先加载多幅点云！");
+            return;
+        }
+        // 原始未配准点云：合并为一幅显示
+        PointCloudPtr merged(new PointCloud);
+        for (const auto& c : m_cloud_list) *merged += *c;
+        updateViewer(merged, ViewerMode::REGISTRATION);
+    });
+	connect(ui.btn_showReg_coarse, &QPushButton::clicked, this, [this]() {	// 粗配准结果可视化
+        if (m_coarse_accumulated.empty())
+        {
+            QMessageBox::warning(this, "警告", "请先执行粗配准！");
+            return;
+        }
+        updateViewer(m_coarse_accumulated.back(), ViewerMode::REGISTRATION);
+    });
+	connect(ui.btn_showReg_fine, &QPushButton::clicked, this, [this]() {	// 精配准结果可视化
+        if (m_fine_accumulated.empty())
+        {
+            QMessageBox::warning(this, "警告", "请先执行精配准！");
+            return;
+        }
+        updateViewer(m_fine_accumulated.back(), ViewerMode::REGISTRATION);
+    });
 
     // ====================== 日志重定向到 te_log ======================
     old_cout_buf = std::cout.rdbuf(log_buffer.rdbuf());
@@ -225,6 +266,7 @@ void MainWindow::loadMultiCloud()
 	m_cloud_list.clear();
 	ui.te_log->clear();  // 清空日志区域以显示加载列表
 	m_cloud_list.clear();
+	ui.listWidget_multi->clear();  // 清空多幅列表
 
 	m_coarse_reg_clouds.clear();
 	m_coarse_accumulated.clear();
@@ -258,6 +300,7 @@ void MainWindow::loadMultiCloud()
 		if (ok){
 			m_cloud_list.push_back(cloud);
 			ui.te_log->append(QString::number(i + 1) + ": " + path);
+			ui.listWidget_multi->addItem(QFileInfo(path).fileName());  // 列表显示文件名
 			LOG_INFO("Loaded: " << path.toStdString());
 		}
 	}
@@ -525,6 +568,7 @@ void MainWindow::undoCloudOperation()
 
 	// 撤销后自动刷新点云信息
 	showCloudInfo();
+	updateViewer(current_cloud, ViewerMode::CLOUD);
 }
 
 
@@ -550,6 +594,8 @@ void MainWindow::clearData()
 	m_fine_transforms.clear();
 
 	m_registration_result->clear();
+	m_concat_result->clear();
+	ui.listWidget_multi->clear();
 
 	ui.te_Info->clear();
 
@@ -639,15 +685,18 @@ void MainWindow::showIntroduction()
 
 // 居中显示
 /**
- * @brief 居中显示（当前版本暂未实现）
+ * @brief 居中显示：请求渲染线程重置相机，使点云居中
+ * @note 渲染线程通过 center_view_requested 原子标志消费请求，避免跨线程直接操作 viewer
  */
-void MainWindow::centerView()   //TODO
+void MainWindow::centerView()
 {
-	QMessageBox::information(
-		this,
-		"提示",
-		"当前版本暂不支持"
-	);
+	if (!viewer_created)
+	{
+		QMessageBox::information(this, "提示", "可视化窗口尚未创建");
+		return;
+	}
+	center_view_requested = true;
+	LOG_INFO("居中显示请求已发送");
 }
 
 #pragma endregion
@@ -1005,6 +1054,27 @@ void MainWindow::pushCloudToUndoStack()
 // 一键预处理（批量：去NaN + 降采样 + 去噪）
 
 /**
+ * @brief 点云拼接：将加载的多幅点云按原始坐标直接合并为一幅
+ */
+void MainWindow::concatenateClouds()
+{
+    if (m_cloud_list.size() < 2)
+    {
+        QMessageBox::warning(this, "警告", "至少需要2幅点云！");
+        return;
+    }
+
+    m_concat_result.reset(new PointCloud);
+    for (const auto& c : m_cloud_list)
+    {
+        *m_concat_result += *c;
+    }
+
+    LOG_INFO("拼接完成，总点数：" << m_concat_result->size());
+    updateViewer(m_concat_result, ViewerMode::CONCATENATE);
+}
+
+/**
  * @brief 批量预处理：对所有点云执行去 NaN + 体素降采样 + 统计去噪
  */
 void MainWindow::on_btn_preprocess_clicked()
@@ -1021,6 +1091,8 @@ void MainWindow::on_btn_preprocess_clicked()
 
     LOG_INFO("Start batch preprocess...");
 
+    QElapsedTimer timer;
+    timer.start();
     for (auto& cloud : m_cloud_list)
     {
         mypcl::removeNaN(cloud);
@@ -1028,7 +1100,7 @@ void MainWindow::on_btn_preprocess_clicked()
         mypcl::doStatisticalOutlierRemoval(cloud, 10, 1.0);
     }
 
-    LOG_INFO("Batch preprocess finished!");
+    LOG_INFO("Batch preprocess finished! 耗时: " << timer.elapsed() << " ms");
 }
 
 // 多幅粗配准
@@ -1050,6 +1122,8 @@ void MainWindow::on_btn_coarse_clicked()
         10 * mypcl::computeAveragePointDistance(m_cloud_list[0]), 0, 10, 3, &ok2);
     if (!ok1 || !ok2) return;
 
+    QElapsedTimer timer;
+    timer.start();
     mypcl::multipleCoarseRegistration(
         m_cloud_list,
         m_coarse_reg_clouds,
@@ -1059,6 +1133,7 @@ void MainWindow::on_btn_coarse_clicked()
         sac_r
     );
 
+    LOG_INFO("粗配准耗时: " << timer.elapsed() << " ms");
     m_registration_result = m_coarse_accumulated.back();
     
     QMessageBox::information(this, "完成", "粗配准完成！");
@@ -1082,6 +1157,8 @@ void MainWindow::on_btn_fine_clicked()
         mypcl::computeAveragePointDistance(m_cloud_list[0]), 0.01, 1, 2, &ok2);
     if (!ok1 || !ok2) return;
 
+    QElapsedTimer timer;
+    timer.start();
     mypcl::multipleFineRegistration(
         m_cloud_list,
         m_fine_reg_clouds,
@@ -1091,6 +1168,7 @@ void MainWindow::on_btn_fine_clicked()
         leaf
     );
 
+    LOG_INFO("精配准耗时: " << timer.elapsed() << " ms");
     m_registration_result = m_fine_accumulated.back();
 
     QMessageBox::information(this, "完成", "精配准完成！");
@@ -1264,6 +1342,14 @@ void MainWindow::renderThreadFunc()
 					persistent_viewer->addPolygonMesh(*newMesh, "mesh");
 				}
 				break;
+			case ViewerMode::CONCATENATE:
+				if (newCloud && !newCloud->empty())
+				{
+					persistent_viewer->addPointCloud(newCloud, "concatenate");
+					persistent_viewer->setPointCloudRenderingProperties(
+						pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "concatenate");
+				}
+				break;
 			case ViewerMode::REGISTRATION:
 				if (newCloud && !newCloud->empty())
 				{
@@ -1282,6 +1368,13 @@ void MainWindow::renderThreadFunc()
 
 		// 处理事件（非阻塞，10ms超时）
 		persistent_viewer->spinOnce(10);
+
+		// 居中显示请求（原子标志，跨线程安全）
+		if (center_view_requested.exchange(false))
+		{
+			persistent_viewer->resetCamera();
+			persistent_viewer->getRenderWindow()->Render();
+		}
 
 		// 如果用户关闭了窗口，重建它
 		if (persistent_viewer->wasStopped())
