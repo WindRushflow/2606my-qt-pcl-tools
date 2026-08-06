@@ -81,6 +81,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui.btn_coarse, &QPushButton::clicked, this, &MainWindow::on_btn_coarse_clicked);
     connect(ui.btn_fine, &QPushButton::clicked, this, &MainWindow::on_btn_fine_clicked);
 
+    // ========== 粗配准后台执行（QtConcurrent）：完成回调自动回主线程 ==========
+    m_coarse_watcher = new QFutureWatcher<void>(this);
+    connect(m_coarse_watcher, &QFutureWatcher<void>::finished, this, &MainWindow::onCoarseFinished);
+
     // ========== 多幅点云：拼接与结果可视化 ==========
     connect(ui.btn_Conc, &QPushButton::clicked, this, &MainWindow::concatenateClouds);
     // 显示拼接结果按钮暂禁用（btn_showCon 已在 .ui 注释）
@@ -121,17 +125,33 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     // ====================== 日志重定向到 te_log ======================
-    old_cout_buf = std::cout.rdbuf(log_buffer.rdbuf());
-    old_cerr_buf = std::cerr.rdbuf(log_buffer.rdbuf());
+    old_cout_buf = std::cout.rdbuf(&log_buffer);
+    old_cerr_buf = std::cerr.rdbuf(&log_buffer);
+
+    // PCL 的 PCL_WARN/PCL_ERROR 直接写【C 层】stderr（fprintf），绕过上面 std::cerr 的 rdbuf，
+    // 会打到控制台窗口逐行渲染——30万点 ISS 的 "third eigenvalue is negative" 警告
+    // 会产生数万行控制台 I/O，Windows 控制台写入是进程级串行，直接拖死 UI。
+    // 对策：把 C 层 stderr 重定向到 NUL（丢弃）。std::cerr 流仍进 log_buffer 显示在界面。
+    freopen("NUL", "w", stderr);
 
     // 用定时器定时把日志刷到界面
     QTimer* log_timer = new QTimer(this);
     connect(log_timer, &QTimer::timeout, this, [this]() {
-        if (!log_buffer.str().empty()) {
+        if (!log_buffer.empty()) {
             // mainwindow.ui has a single te_log and te_Info for info
-            ui.te_log->append(QString::fromStdString(log_buffer.str()));
-            log_buffer.str("");
-            log_buffer.clear();
+            ui.te_log->append(QString::fromStdString(log_buffer.take()));
+
+            // 显示行数护栏：超过 MAX_LOG_BLOCKS 删掉最前面的，防止超长任务刷爆界面
+            const int MAX_LOG_BLOCKS = 5000;
+            QTextDocument* doc = ui.te_log->document();
+            int overflow = doc->blockCount() - MAX_LOG_BLOCKS;
+            if (overflow > 0) {
+                QTextCursor cur(doc);
+                cur.movePosition(QTextCursor::Start);
+                cur.movePosition(QTextCursor::Down, QTextCursor::KeepAnchor, overflow);
+                cur.removeSelectedText();
+                cur.deleteChar();
+            }
 
             // 自动滚动到底部
             QTextCursor cursor = ui.te_log->textCursor();
@@ -1140,10 +1160,30 @@ void MainWindow::on_btn_preprocess_clicked()
  */
 void MainWindow::on_btn_coarse_clicked()
 {
+    if (m_coarse_running)
+    {
+        QMessageBox::warning(this, "提示", "粗配准正在后台执行，请稍候！");
+        return;
+    }
     if (m_cloud_list.size() < 2)
     {
         QMessageBox::warning(this, "警告", "至少需要2幅点云！");
         return;
+    }
+
+    // ===== 大点云提醒：>10 万点提示先预处理（阈值与库侧 max_points_per_cloud 默认值一致）=====
+    // 用户知情可控；即使直接配，库侧仍有自动降采样兜底，不会卡死
+    size_t max_pts = 0;
+    for (const auto& c : m_cloud_list)
+        if (c) max_pts = std::max(max_pts, c->size());
+    if (max_pts > 100000)
+    {
+        QMessageBox::StandardButton btn = QMessageBox::question(this, "提示",
+            QString("检测到点云过大（最大 %1 点），直接配准将自动降采样，精度会受影响。\n"
+                    "建议先执行「批量预处理」（去噪+降采样）。\n\n"
+                    "是否仍要直接配准？").arg(static_cast<qulonglong>(max_pts)),
+            QMessageBox::Yes | QMessageBox::No);
+        if (btn != QMessageBox::Yes) return;   // 用户选择先去预处理
     }
 
     bool ok1, ok2;
@@ -1153,21 +1193,71 @@ void MainWindow::on_btn_coarse_clicked()
         10 * mypcl::computeAveragePointDistance(m_cloud_list[0]), 0, 10, 3, &ok2);
     if (!ok1 || !ok2) return;
 
-    QElapsedTimer timer;
-    timer.start();
-    mypcl::multipleCoarseRegistration(
-        m_cloud_list,
-        m_coarse_reg_clouds,
-        m_coarse_accumulated,
-        m_coarse_transforms,
-        fpfh_r,
-        sac_r
-    );
+    // ===== 后台执行：粗配准丢进 QtConcurrent 线程池，UI 不再卡死 =====
+    // 参数弹窗必须在主线程（模态），算法本体进工作线程
+    m_coarse_running = true;
+    setBusyUI(true);
 
-    LOG_INFO("粗配准耗时: " << timer.elapsed() << " ms");
-    m_registration_result = m_coarse_accumulated.back();
-    
+    m_coarse_watcher->setFuture(QtConcurrent::run([this, fpfh_r, sac_r]() {
+        try {
+            QElapsedTimer timer;
+            timer.start();
+            mypcl::multipleCoarseRegistration(
+                m_cloud_list,
+                m_coarse_reg_clouds,
+                m_coarse_accumulated,
+                m_coarse_transforms,
+                fpfh_r,
+                sac_r
+            );
+            LOG_INFO("粗配准耗时: " << timer.elapsed() << " ms");
+        }
+        catch (const std::exception& e) {
+            LOG_ERROR("粗配准异常: " << e.what());
+        }
+        catch (...) {
+            LOG_ERROR("粗配准异常: 未知错误");
+        }
+    }));
+    // 完成回调 onCoarseFinished() 由 watcher 在【主线程】发射，见下
+}
+
+/**
+ * @brief 粗配准完成回调（主线程执行）
+ * 工作线程已结束，主线程安全地取结果、恢复按钮。
+ */
+void MainWindow::onCoarseFinished()
+{
+    m_coarse_running = false;
+    setBusyUI(false);
+    if (m_coarse_accumulated.empty())
+    {
+        QMessageBox::warning(this, "错误", "粗配准未产生结果（可能已中断），请查看日志！");
+        return;
+    }
+    m_registration_result = m_coarse_accumulated.back();  // 粗配准拼接结果
     QMessageBox::information(this, "完成", "粗配准完成！");
+}
+
+/**
+ * @brief 配准期间禁用/恢复与共享数据相关的控件
+ * 粗配准工作线程正在读写 m_cloud_list / m_coarse_*，这些控件的操作
+ * 会与工作线程产生数据竞争，运行期间必须禁用；单点云处理按钮
+ * （操作 m_current_cloud，与配准无关）保持可用。
+ */
+void MainWindow::setBusyUI(bool busy)
+{
+    ui.action_load->setEnabled(!busy);
+    ui.action_clear->setEnabled(!busy);
+    ui.action_undo->setEnabled(!busy);
+    ui.btn_preprocess->setEnabled(!busy);
+    ui.btn_Conc->setEnabled(!busy);
+    ui.btn_coarse->setEnabled(!busy);
+    ui.btn_fine->setEnabled(!busy);
+    ui.btn_showReg_raw->setEnabled(!busy);
+    ui.btn_showReg_coarse->setEnabled(!busy);
+    ui.btn_showReg_fine->setEnabled(!busy);
+    ui.listWidget_multi->setEnabled(!busy);
 }
 
 // 多幅精配准
@@ -1176,11 +1266,11 @@ void MainWindow::on_btn_coarse_clicked()
  */
 void MainWindow::on_btn_fine_clicked()
 {
-    if (m_coarse_accumulated.empty())
-    {
-        QMessageBox::warning(this, "警告", "请先执行粗配准！");
-        return;
-    }
+    //if (m_coarse_accumulated.empty())
+    //{
+    //    QMessageBox::warning(this, "警告", "请先执行粗配准！");
+    //    return;
+    //}
 
     bool ok1, ok2;
     double max_d = QInputDialog::getDouble(this, "ICP最大距离", "ICP最大距离", 1.0, 0, 10, 3, &ok1);

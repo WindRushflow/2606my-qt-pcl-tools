@@ -36,7 +36,7 @@ source_group(TREE "${CMAKE_SOURCE_DIR}" FILES ${UI_FILES})
 # ==============================
 # 依赖
 # ==============================
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent)
 
 # 优先找到带 Qt 支持的 VTK（含 QVTKOpenGLNativeWidget）
 list(PREPEND CMAKE_PREFIX_PATH "D:/VTK/VTK-9.4.2-Qt")
@@ -75,6 +75,7 @@ target_link_libraries(${PROJECT_NAME}
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
+        Qt6::Concurrent
         ${PCL_LIBRARIES}
         ${VTK_LIBRARIES}
         VTK::GUISupportQt

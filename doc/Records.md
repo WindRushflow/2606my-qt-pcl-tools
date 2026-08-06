@@ -191,3 +191,33 @@
 5. **2606myPclLib 的 git 管理权交接**
    - 用户授权：库的 add/commit/push 时机完全由 AI 自主管理（工具项目仍由用户自行提交）
    - 背景：8-05 库无 git 导致排查艰难 → 8-06 已 init（79a397f）并提交抽样优化（8e67d59）
+
+6. **粗配准耗时优化（完成）**
+   - 每步计时定位：SAC-IA 占 77%、ISS 21%、法线+FPFH 2%
+   - SAC-IA 迭代 1000→800：粗配准 44.8s→29.5s（fitness 不变）
+   - 试过 ISS 半径 5× 失败：扫描数据半径大→关键点翻倍（2048→4527，与 ISS 均匀点云理论相反），回退 3× 基线
+   - 知识点：参数调整必须 A/B 实测验证，不能只看理论；SAC 耗时主控因素=关键点数
+
+7. **日志系统线程安全（完成）**
+   - ThreadSafeLogBuf（继承 streambuf，mutex 保护 xsputn/overflow + take()）替代裸 stringstream
+   - 容量护栏 200KB（超限丢新日志）+ te_log 显示上限 5000 行（防超长任务刷爆界面）
+   - 发现 PCL_WARN 走 C 层 fprintf(stderr)，绕过 std::cerr 的 rdbuf → freopen("NUL","w",stderr) 重定向丢弃
+   - 知识点：std::cout/cerr 的 rdbuf 重定向只对 C++ 流有效，C 层 FILE* 要 freopen；后台任务异常不会自动传到主线程
+
+8. **QtConcurrent 粗配准后台执行（完成）**
+   - 粗配准丢线程池，UI 不再卡死；finished 信号回主线程更新结果
+   - setBusyUI 禁用共享数据按钮（加载/预处理/配准/显示结果/多幅列表），单点云按钮保持可用
+   - onCoarseFinished 空检查（防 back() on empty 二次崩溃）+ lambda try-catch（异常进日志不再静默）
+   - CMake 加 Qt6::Concurrent
+
+9. **大点云保护（完成）**
+   - 直接粗配准 30 万点卡死根因：原始点云含 5.7 万 NaN + 无去噪 → SOR/KdTree 崩 + ISS 关键点暴跌(130)
+   - 库入口保护链：is_dense 判断 NaN → removeNaN → 超 10 万自适应降采样(2×平均间距,翻倍兜底) → SOR 去噪 → 按新间距重算 fpfh/sac 参数
+   - 项目侧：大点云弹窗提醒（建议先预处理，选否可返回），阈值 10 万与库默认一致
+   - 知识点：is_dense 是约定标志（加载/filter 可靠，手动 push_back 不维护）；降采样必须配去噪+参数重算
+
+10. **其他**
+   - ISS setNumberOfThreads 4→1（工作线程 OpenMP 死锁风险）
+   - CMakeLists 加 /utf-8（修复 MSVC GBK 吞行 C4819：中文注释 UTF-8 字节被 GBK 双字节吞换行）
+   - 库提交 7f39927 已 push Gitee
+   - 待验证：SOR 修复后直接粗配准 ISS 关键点恢复 2000+（主人下次跑）

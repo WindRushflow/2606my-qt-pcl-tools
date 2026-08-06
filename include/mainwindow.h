@@ -25,8 +25,15 @@
 // C++多线程
 #include <thread>         // 异步处理耗时点云运算
 
+// QtConcurrent 多线程（粗配准后台执行，UI 不卡死）
+#include <QtConcurrent/QtConcurrent>
+#include <QFutureWatcher>
+
 // 自建pcl数据处理库
 #include "mypcl.h"
+
+// 线程安全日志缓冲（库线程写日志 / 主线程定时刷新共用）
+#include "threadsafelogbuf.h"
 
 // 别名
 // PCL点云基础类型别名
@@ -114,6 +121,7 @@ public:
     void on_btn_preprocess_clicked();    // 一键预处理：去NaN + 降采样 + 去噪
     void on_btn_coarse_clicked();        // SAC-IA 粗配准
     void on_btn_fine_clicked();          // ICP 精配准
+    void onCoarseFinished();             // 粗配准后台执行完成回调（主线程）
 
 #pragma endregion
 
@@ -159,7 +167,7 @@ private:
     // 用来接管 cout 的输出
     std::streambuf* old_cout_buf = nullptr;
     std::streambuf* old_cerr_buf = nullptr;
-    std::stringstream log_buffer;
+    ThreadSafeLogBuf log_buffer;   // 线程安全：工作线程写、主线程定时读
 
     // ==== 全局数据 ====
     PointCloudPtr current_cloud;           // 当前点云
@@ -178,6 +186,11 @@ private:
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr m_registration_result;               // 最终配准结果
     PointCloudPtr m_concat_result;                     // 点云拼接结果（坐标直接叠加）
+
+    // 粗配准多线程（QtConcurrent）
+    QFutureWatcher<void>* m_coarse_watcher = nullptr; // 粗配准 future 监听器
+    std::atomic<bool> m_coarse_running{ false };      // 粗配准是否正在后台执行
+    void setBusyUI(bool busy);                        // 配准期间禁用共享数据相关控件
 
 protected:
     //void showEvent(QShowEvent* event) override;
