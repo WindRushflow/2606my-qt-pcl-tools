@@ -82,8 +82,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui.btn_fine, &QPushButton::clicked, this, &MainWindow::on_btn_fine_clicked);
 
     // ========== 多幅点云：拼接与结果可视化 ==========
-    // TODO: "点云拼接"暂未定义明确语义（无变换叠加与"原始合并"等价），按钮暂禁用
-    // connect(ui.btn_Conc, &QPushButton::clicked, this, &MainWindow::concatenateClouds);
+    connect(ui.btn_Conc, &QPushButton::clicked, this, &MainWindow::concatenateClouds);
+    // 显示拼接结果按钮暂禁用（btn_showCon 已在 .ui 注释）
     // connect(ui.btn_showCon, &QPushButton::clicked, this, [this]() {		// 拼接结果可视化
     //     if (!m_concat_result || m_concat_result->empty())
     //     {

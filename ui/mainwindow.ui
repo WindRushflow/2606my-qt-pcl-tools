@@ -246,6 +246,13 @@
              </widget>
             </item>
             <item>
+             <widget class="QPushButton" name="btn_Conc">
+              <property name="text">
+               <string>点云拼接合并</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QGroupBox" name="groupBox_2">
               <property name="title">
                <string>配准</string>
