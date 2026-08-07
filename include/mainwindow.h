@@ -122,6 +122,8 @@ public:
     void on_btn_coarse_clicked();        // SAC-IA 粗配准
     void on_btn_fine_clicked();          // ICP 精配准
     void onCoarseFinished();             // 粗配准后台执行完成回调（主线程）
+    void onPreprocessFinished();         // 批量预处理后台执行完成回调（主线程）
+    void onFineFinished();               // 精配准后台执行完成回调（主线程）
 
 #pragma endregion
 
@@ -187,10 +189,13 @@ private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr m_registration_result;               // 最终配准结果
     PointCloudPtr m_concat_result;                     // 点云拼接结果（坐标直接叠加）
 
-    // 粗配准多线程（QtConcurrent）
-    QFutureWatcher<void>* m_coarse_watcher = nullptr; // 粗配准 future 监听器
-    std::atomic<bool> m_coarse_running{ false };      // 粗配准是否正在后台执行
-    void setBusyUI(bool busy);                        // 配准期间禁用共享数据相关控件
+    // 后台任务多线程（QtConcurrent）：预处理 / 粗配准 / 精配准
+    // 同一时刻只允许一个后台任务（三者共享 m_cloud_list / m_coarse_* / m_fine_* 数据）
+    QFutureWatcher<void>* m_preprocess_watcher = nullptr; // 预处理 future 监听器
+    QFutureWatcher<void>* m_coarse_watcher = nullptr;     // 粗配准 future 监听器
+    QFutureWatcher<void>* m_fine_watcher = nullptr;       // 精配准 future 监听器
+    std::atomic<bool> m_busy_running{ false };            // 任一后台任务正在执行
+    void setBusyUI(bool busy);                        // 任务期间禁用共享数据相关控件
 
 protected:
     //void showEvent(QShowEvent* event) override;

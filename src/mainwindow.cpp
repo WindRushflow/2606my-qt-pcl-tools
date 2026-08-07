@@ -81,9 +81,14 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui.btn_coarse, &QPushButton::clicked, this, &MainWindow::on_btn_coarse_clicked);
     connect(ui.btn_fine, &QPushButton::clicked, this, &MainWindow::on_btn_fine_clicked);
 
-    // ========== 粗配准后台执行（QtConcurrent）：完成回调自动回主线程 ==========
+    // ========== 后台任务（QtConcurrent）：完成回调自动回主线程 ==========
+    // 预处理 / 粗配准 / 精配准 各一个 watcher，同一时刻只跑一个后台任务
+    m_preprocess_watcher = new QFutureWatcher<void>(this);
+    connect(m_preprocess_watcher, &QFutureWatcher<void>::finished, this, &MainWindow::onPreprocessFinished);
     m_coarse_watcher = new QFutureWatcher<void>(this);
     connect(m_coarse_watcher, &QFutureWatcher<void>::finished, this, &MainWindow::onCoarseFinished);
+    m_fine_watcher = new QFutureWatcher<void>(this);
+    connect(m_fine_watcher, &QFutureWatcher<void>::finished, this, &MainWindow::onFineFinished);
 
     // ========== 多幅点云：拼接与结果可视化 ==========
     connect(ui.btn_Conc, &QPushButton::clicked, this, &MainWindow::concatenateClouds);
@@ -1130,6 +1135,11 @@ void MainWindow::concatenateClouds()
  */
 void MainWindow::on_btn_preprocess_clicked()
 {
+    if (m_busy_running)
+    {
+        QMessageBox::warning(this, "提示", "有后台任务正在执行，请稍候！");
+        return;
+    }
     if (m_cloud_list.empty())
     {
         QMessageBox::warning(this, "警告", "请先加载点云！");
@@ -1140,18 +1150,41 @@ void MainWindow::on_btn_preprocess_clicked()
     double leaf = QInputDialog::getDouble(this, "降采样", "体素大小", 0.01, 0, 10, 3, &ok);
     if (!ok) return;
 
-    LOG_INFO("Start batch preprocess...");
+    // ===== 后台执行：批量预处理丢进线程池，UI 不卡死 =====
+    m_busy_running = true;
+    setBusyUI(true);
 
-    QElapsedTimer timer;
-    timer.start();
-    for (auto& cloud : m_cloud_list)
-    {
-        mypcl::removeNaN(cloud);
-        mypcl::doVoxelFilter(cloud, leaf);
-        mypcl::doStatisticalOutlierRemoval(cloud, 10, 1.0);
-    }
+    m_preprocess_watcher->setFuture(QtConcurrent::run([this, leaf]() {
+        try {
+            LOG_INFO("Start batch preprocess...");
+            QElapsedTimer timer;
+            timer.start();
+            for (auto& cloud : m_cloud_list)
+            {
+                mypcl::removeNaN(cloud);
+                mypcl::doVoxelFilter(cloud, leaf);
+                mypcl::doStatisticalOutlierRemoval(cloud, 10, 1.0);
+            }
+            LOG_INFO("Batch preprocess finished! 耗时: " << timer.elapsed() << " ms");
+        }
+        catch (const std::exception& e) {
+            LOG_ERROR("预处理异常: " << e.what());
+        }
+        catch (...) {
+            LOG_ERROR("预处理异常: 未知错误");
+        }
+    }));
+    // 完成回调 onPreprocessFinished() 由 watcher 在【主线程】发射
+}
 
-    LOG_INFO("Batch preprocess finished! 耗时: " << timer.elapsed() << " ms");
+/**
+ * @brief 批量预处理完成回调（主线程执行）
+ */
+void MainWindow::onPreprocessFinished()
+{
+    m_busy_running = false;
+    setBusyUI(false);
+    QMessageBox::information(this, "完成", "批量预处理完成！");
 }
 
 // 多幅粗配准
@@ -1160,9 +1193,9 @@ void MainWindow::on_btn_preprocess_clicked()
  */
 void MainWindow::on_btn_coarse_clicked()
 {
-    if (m_coarse_running)
+    if (m_busy_running)
     {
-        QMessageBox::warning(this, "提示", "粗配准正在后台执行，请稍候！");
+        QMessageBox::warning(this, "提示", "有后台任务正在执行，请稍候！");
         return;
     }
     if (m_cloud_list.size() < 2)
@@ -1195,7 +1228,7 @@ void MainWindow::on_btn_coarse_clicked()
 
     // ===== 后台执行：粗配准丢进 QtConcurrent 线程池，UI 不再卡死 =====
     // 参数弹窗必须在主线程（模态），算法本体进工作线程
-    m_coarse_running = true;
+    m_busy_running = true;
     setBusyUI(true);
 
     m_coarse_watcher->setFuture(QtConcurrent::run([this, fpfh_r, sac_r]() {
@@ -1228,7 +1261,7 @@ void MainWindow::on_btn_coarse_clicked()
  */
 void MainWindow::onCoarseFinished()
 {
-    m_coarse_running = false;
+    m_busy_running = false;
     setBusyUI(false);
     if (m_coarse_accumulated.empty())
     {
@@ -1266,11 +1299,16 @@ void MainWindow::setBusyUI(bool busy)
  */
 void MainWindow::on_btn_fine_clicked()
 {
-    //if (m_coarse_accumulated.empty())
-    //{
-    //    QMessageBox::warning(this, "警告", "请先执行粗配准！");
-    //    return;
-    //}
+    if (m_busy_running)
+    {
+        QMessageBox::warning(this, "提示", "有后台任务正在执行，请稍候！");
+        return;
+    }
+    if (m_cloud_list.size() < 2)
+    {
+        QMessageBox::warning(this, "警告", "至少需要2幅点云！");
+        return;
+    }
 
     bool ok1, ok2;
     double max_d = QInputDialog::getDouble(this, "ICP最大距离", "ICP最大距离", 1.0, 0, 10, 3, &ok1);
@@ -1278,20 +1316,48 @@ void MainWindow::on_btn_fine_clicked()
         mypcl::computeAveragePointDistance(m_cloud_list[0]), 0.01, 1, 2, &ok2);
     if (!ok1 || !ok2) return;
 
-    QElapsedTimer timer;
-    timer.start();
-    mypcl::multipleFineRegistration(
-        m_cloud_list,
-        m_fine_reg_clouds,
-        m_fine_accumulated,
-        m_fine_transforms,
-        max_d,
-        leaf
-    );
+    // ===== 后台执行：精配准丢进线程池，UI 不卡死 =====
+    m_busy_running = true;
+    setBusyUI(true);
 
-    LOG_INFO("精配准耗时: " << timer.elapsed() << " ms");
-    m_registration_result = m_fine_accumulated.back();
+    m_fine_watcher->setFuture(QtConcurrent::run([this, max_d, leaf]() {
+        try {
+            QElapsedTimer timer;
+            timer.start();
+            mypcl::multipleFineRegistration(
+                m_cloud_list,
+                m_fine_reg_clouds,
+                m_fine_accumulated,
+                m_fine_transforms,
+                max_d,
+                leaf
+            );
+            LOG_INFO("精配准耗时: " << timer.elapsed() << " ms");
+        }
+        catch (const std::exception& e) {
+            LOG_ERROR("精配准异常: " << e.what());
+        }
+        catch (...) {
+            LOG_ERROR("精配准异常: 未知错误");
+        }
+    }));
+    // 完成回调 onFineFinished() 由 watcher 在【主线程】发射
+}
 
+/**
+ * @brief 精配准完成回调（主线程执行）
+ * 工作线程已结束，主线程安全地取结果、恢复按钮。
+ */
+void MainWindow::onFineFinished()
+{
+    m_busy_running = false;
+    setBusyUI(false);
+    if (m_fine_accumulated.empty())
+    {
+        QMessageBox::warning(this, "错误", "精配准未产生结果（可能已中断），请查看日志！");
+        return;
+    }
+    m_registration_result = m_fine_accumulated.back();  // 精配准拼接结果
     QMessageBox::information(this, "完成", "精配准完成！");
 }
 
