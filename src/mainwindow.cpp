@@ -144,7 +144,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(log_timer, &QTimer::timeout, this, [this]() {
         if (!log_buffer.empty()) {
             // mainwindow.ui has a single te_log and te_Info for info
-            ui.te_log->append(QString::fromStdString(log_buffer.take()));
+            QString logText = QString::fromStdString(log_buffer.take());
+            if (logText.endsWith('\n')) logText.chop(1);   // 去掉末尾换行：避免 append 新建块时产生多余空行
+            ui.te_log->append(logText);
 
             // 显示行数护栏：超过 MAX_LOG_BLOCKS 删掉最前面的，防止超长任务刷爆界面
             const int MAX_LOG_BLOCKS = 5000;
@@ -1165,7 +1167,7 @@ void MainWindow::on_btn_preprocess_clicked()
                 mypcl::doVoxelFilter(cloud, leaf);
                 mypcl::doStatisticalOutlierRemoval(cloud, 10, 1.0);
             }
-            LOG_INFO("Batch preprocess finished! 耗时: " << timer.elapsed() << " ms");
+            LOG_INFO("Batch preprocess finished! 耗时: " << timer.elapsed() << " ms" << endl );
         }
         catch (const std::exception& e) {
             LOG_ERROR("预处理异常: " << e.what());
