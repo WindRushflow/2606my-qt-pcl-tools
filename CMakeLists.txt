@@ -45,6 +45,12 @@ find_package(VTK REQUIRED COMPONENTS GUISupportQt)
 find_package(PCL REQUIRED)
 
 # ==============================
+# 自建库（子工程方式挂载）：改库后 VS 一次生成自动重编+重链
+# ==============================
+add_subdirectory(E:/sdmcfjwrjsscj/practice/VSCode-C++/PointCloud/2606myPclLib
+                 ${CMAKE_BINARY_DIR}/mypcllib-build)
+
+# ==============================
 # 生成 exe
 # ==============================
 add_executable(${PROJECT_NAME}
@@ -61,7 +67,6 @@ target_include_directories(${PROJECT_NAME}
         "${CMAKE_SOURCE_DIR}/include"
         ${PCL_INCLUDE_DIRS}
         "${CMAKE_BINARY_DIR}"
-        E:/sdmcfjwrjsscj/practice/VSCode-C++/PointCloud/2606myPclLib/include
 )
 
 add_definitions(${PCL_DEFINITIONS})
@@ -79,5 +84,5 @@ target_link_libraries(${PROJECT_NAME}
         ${PCL_LIBRARIES}
         ${VTK_LIBRARIES}
         VTK::GUISupportQt
-        debug   E:/sdmcfjwrjsscj/practice/VSCode-C++/PointCloud/2606myPclLib/output/Debug/mypcllib.lib
+        mypcllib   # 自建库（add_subdirectory 子工程，改库后一次生成自动重链）
 )

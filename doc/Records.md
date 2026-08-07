@@ -221,3 +221,34 @@
    - CMakeLists 加 /utf-8（修复 MSVC GBK 吞行 C4819：中文注释 UTF-8 字节被 GBK 双字节吞换行）
    - 库提交 7f39927 已 push Gitee
    - 待验证：SOR 修复后直接粗配准 ISS 关键点恢复 2000+（主人下次跑）
+
+
+### 2026-08-07
+
+**总结：** 第一层多线程（UI 不卡）全闭环 + 第二层优化（预计算并行/精配准提速），粗配准 45s→23.8s、精配准 22s→15.8s；并行实验两次翻车（嵌套超载/值捕获丢数据）收获重要教训。
+
+1. **第一层多线程全闭环**
+   - 批量预处理 + 精配准也 QtConcurrent 后台化（粗配准昨天已做）→ 三个耗时操作全部后台执行，UI 不再卡
+   - 统一 busy 状态：m_coarse_running → m_busy_running（同一时刻只允许一个后台任务，三者共享 m_cloud_list/m_coarse_*/m_fine_* 数据）
+   - 知识点：回调（callback）= 框架在特定时机调用你注册的函数；QFutureWatcher::finished 信号在 watcher 所属线程（主线程）发射，回调里碰 UI 才安全
+
+2. **第二层优化：粗配准预计算重构（完成）**
+   - 关键洞察：ISS 关键点与 FPFH 特征对刚体变换不变 → 把 ISS+FPFH 从配准循环提出，每帧只算一遍（消除中间帧重复提取），主循环只做 SAC + 关键点坐标变换（0.06ms）+ 点云变换 + 累计
+   - 预计算帧间 std::async 并行 + ISS 单线程：26.2s → 23.8s
+   - 修 reg_clouds[0] 用 input_clouds[0]（降采样保护后坐标系不一致）→ work_clouds[0]
+   - 知识点：刚体变换不变性；依赖分析（有依赖串行、无依赖并行）
+
+3. **并行实验两次翻车（重要教训）**
+   - 嵌套并行：帧间 std::async × ISS 内部 OpenMP 4 线程 = 12 线程超载 → 预计算 11.2s > 串行 7.4s（负优化）。解法：二选一（帧间并行则 ISS 单线程）→ 6.1s 最优
+   - 预处理帧间并行：实测 4.9s > 串行 3.7s（内存带宽竞争）+ 日志交错 + 值捕获 shared_ptr 被 doVoxelFilter 的 cloud.swap 替换不写回 m_cloud_list 的 bug（精配准拿到原始 30 万点）→ 回退串行
+   - 知识点：并行不是免费的（内存带宽隐形瓶颈）；值捕获 shared_ptr 替换指针不影响外层，必须传引用或写回；先验证正确性再谈性能（Original: 249931 这类数据错误比慢 1 秒严重得多）
+
+4. **精配准提速（完成）**
+   - 死代码 bug：函数里做了 src_down/tgt_down 降采样，但 ICP 用的是原始全量 target/source → 降采样白算，ICP 在 30 万点上跑 80 次迭代
+   - 修复：ICP 改用降采样点云 + 1.5 倍自适应降采样（leaf = max(用户leaf, 1.5×平均间距)，主人定 1.5 保守保精度）→ 24s → 15.8s，fitness 0.0002/0.0029 未劣化
+   - 知识点：死代码 bug 的排查价值；已预处理点云再 voxel 原 leaf 无点可降，自适应 leaf 才有效
+
+5. **其他**
+   - 日志空行修复：QTextBrowser append 每次新建块 + LOG_INFO 末尾 endl → 多次 take 分批显示产生空行，append 前 chop 末尾换行
+   - extractISSKeypoints 隐式契约：调用方必须预分配输出点云（!keypoints 检查直接 return），新调用方易踩
+   - git：库 06af2a6（预计算并行）/06a1f59（精配准优化）；工具 9148293/b98752c/d66c271 均已 push
