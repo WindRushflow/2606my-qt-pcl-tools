@@ -10,6 +10,7 @@
 #include <pcl/visualization/pcl_visualizer.h>
 
 #include <vector>
+#include <future>   // 预处理帧间并行（std::async）
 #include <pcl/point_cloud.h>
 
 #include "mypcl.h"
@@ -1158,16 +1159,19 @@ void MainWindow::on_btn_preprocess_clicked()
 
     m_preprocess_watcher->setFuture(QtConcurrent::run([this, leaf]() {
         try {
+			cout << endl;
             LOG_INFO("Start batch preprocess...");
             QElapsedTimer timer;
             timer.start();
+            // 注：曾试过帧间 std::async 并行——实测变慢(4.9s>3.7s, 内存带宽竞争) + 日志交错 +
+            // 值捕获 shared_ptr 被替换不写回 m_cloud_list 的 bug，已回退串行
             for (auto& cloud : m_cloud_list)
             {
                 mypcl::removeNaN(cloud);
                 mypcl::doVoxelFilter(cloud, leaf);
                 mypcl::doStatisticalOutlierRemoval(cloud, 10, 1.0);
             }
-            LOG_INFO("Batch preprocess finished! 耗时: " << timer.elapsed() << " ms" << endl );
+            LOG_INFO("Batch preprocess finished! 耗时: " << timer.elapsed() << " ms" );
         }
         catch (const std::exception& e) {
             LOG_ERROR("预处理异常: " << e.what());
@@ -1237,6 +1241,7 @@ void MainWindow::on_btn_coarse_clicked()
         try {
             QElapsedTimer timer;
             timer.start();
+			cout << endl;
             mypcl::multipleCoarseRegistration(
                 m_cloud_list,
                 m_coarse_reg_clouds,
@@ -1297,7 +1302,7 @@ void MainWindow::setBusyUI(bool busy)
 
 // 多幅精配准
 /**
- * @brief ICP 精配准，需先完成粗配准
+ * @brief ICP 精配准
  */
 void MainWindow::on_btn_fine_clicked()
 {
@@ -1326,6 +1331,7 @@ void MainWindow::on_btn_fine_clicked()
         try {
             QElapsedTimer timer;
             timer.start();
+			cout << endl;
             mypcl::multipleFineRegistration(
                 m_cloud_list,
                 m_fine_reg_clouds,
