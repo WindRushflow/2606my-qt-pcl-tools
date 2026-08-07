@@ -20,7 +20,7 @@
       <item>
        <widget class="QTabWidget" name="Left_tab">
         <property name="currentIndex">
-         <number>1</number>
+         <number>0</number>
         </property>
         <widget class="QWidget" name="tab_single">
          <attribute name="title">
@@ -30,7 +30,7 @@
           <item>
            <widget class="QToolBox" name="toolBox">
             <property name="currentIndex">
-             <number>2</number>
+             <number>0</number>
             </property>
             <widget class="QWidget" name="page_3">
              <property name="geometry">
@@ -116,16 +116,16 @@
               <item>
                <layout class="QVBoxLayout" name="verticalLayout_3">
                 <item>
-                 <widget class="QPushButton" name="btn_normalsAlign">
+                 <widget class="QPushButton" name="btn_NE">
                   <property name="text">
-                   <string>法线方向一致化</string>
+                   <string>法向量估计</string>
                   </property>
                  </widget>
                 </item>
                 <item>
-                 <widget class="QPushButton" name="btn_NE">
+                 <widget class="QPushButton" name="btn_normalsAlign">
                   <property name="text">
-                   <string>法向量估计</string>
+                   <string>法线方向一致化</string>
                   </property>
                  </widget>
                 </item>
@@ -152,8 +152,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>258</width>
-               <height>323</height>
+               <width>138</width>
+               <height>122</height>
               </rect>
              </property>
              <attribute name="label">
@@ -192,8 +192,8 @@
               <rect>
                <x>0</x>
                <y>0</y>
-               <width>258</width>
-               <height>323</height>
+               <width>132</width>
+               <height>122</height>
               </rect>
              </property>
              <attribute name="label">
