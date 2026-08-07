@@ -252,3 +252,32 @@
    - 日志空行修复：QTextBrowser append 每次新建块 + LOG_INFO 末尾 endl → 多次 take 分批显示产生空行，append 前 chop 末尾换行
    - extractISSKeypoints 隐式契约：调用方必须预分配输出点云（!keypoints 检查直接 return），新调用方易踩
    - git：库 06af2a6（预计算并行）/06a1f59（精配准优化）；工具 9148293/b98752c/d66c271 均已 push
+
+6. **点云信息双版本（完成）**
+   - 简化版（信息栏 te_Info）：文件名/点数/宽高/XYZ范围/平均间距/法线状态，加载后自动刷新
+   - 详细版（「完整点云信息」弹窗，可滚动 QDialog+QPlainTextEdit）：File/点数/宽高/Is Dense/XYZ/Box Size/Centroid/平均间距/变异系数
+   - 库 printPointCloudBasicInfo 加 filename 参数（默认空），新增 printPointCloudBasicInfoBrief
+   - 主人在 VS 里误触的 `tou` 乱码修复（setEnabled 行尾）
+
+7. **弹窗参数规范化（完成）**
+   - 默认值自适应：voxel/均匀/半径滤波/MLS/法线/批量预处理 默认 = 2×平均点间距
+   - 所有 QInputDialog::getDouble 小数位统一 4 位
+   - 教训：跨两行的 getDouble（decimals 在第二行）用 `[^)]` 正则会被 value 表达式里的括号骗到，必须 DOTALL 跨行匹配
+
+8. **耗时统计体系 + 结果去重（完成）**
+   - 新增：法线估计、法线混乱度、贪婪投影、泊松、重建质量 耗时统计
+   - 教训：库内部已 LOG 结果的函数（evaluateNormalChaos 的 score、computeReconstructionError 的 error），项目侧不要再重复显示——先查库内是否已输出再决定
+
+9. **重建后台化（完成）**
+   - 贪婪投影 + 泊松 QtConcurrent 后台执行（8.5s/8.9s 不再卡 UI），共用 m_reconstruct_watcher + onReconstructFinished
+   - setBusyUI 扩展 disable_single 参数：重建期间单点云按钮也禁用（重建读写 current_cloud/normals/mesh）；配准期间单点云保持可用（原设计不变）
+
+10. **混乱度抽样 + 越界防御（完成）**
+    - evaluateNormalChaos 抽样 MAX_EVAL=20000（同 avg 方案，Fisher-Yates）
+    - 偶发崩溃修复：normals/cloud 大小不一致（MLS 等操作后不同步）导致 points[idx] 越界 → 开头大小检查 + SAFE_N=min 兜底
+
+11. **工程规范（完成）**
+    - 工具项目新建 .gitignore（含 .claude/），git rm --cached 取消跟踪
+    - 库 add_subdirectory 子工程挂载（改库一次生成自动重链）
+    - CRLF 问题根治：读写脚本统一用「二进制读 + 换行归一化 + 按原风格写回」模板（已写入项目记忆）
+    - Designments 更新至 V2.1.0（含新增 TODO 5 条）

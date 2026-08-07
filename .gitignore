@@ -1,4 +1,4 @@
-# 编译生成物（绝对不能提交，否则仓库瞬间变几GB）
+# 编译产物
 *.exe
 *.dll
 *.lib
@@ -8,23 +8,14 @@
 Debug/
 Release/
 x64/
-x86/
 build/
-cmake-build-*/
+output/
 
-# VS Code 个人配置（不要上传，否则换台电脑你的快捷键会覆盖别人的）
-.vscode/
+# 工具目录（AI 辅助）
+.claude/
 
-# Qt 相关临时文件
-*.pro.user
-*.autosave
+# 测试数据
+data/
 
-# 点云数据文件（.pcd .ply 通常几百MB，千万不要传进 Git！）
-*.pcd
-*.ply
-*.las
-*.laz
-
-# Windows 资源管理器垃圾
-Thumbs.db
-Desktop.ini
+# 临时脚本（改库用的一次性 Python 脚本）
+_tmp_*.py

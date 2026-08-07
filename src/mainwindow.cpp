@@ -3,7 +3,11 @@
 #include <QFileDialog>  // 文件选择框
 #include <QMessageBox>  // 弹出提示框
 #include <QTextStream>  //
-#include <QElapsedTimer>  // 耗时统计 
+#include <QElapsedTimer>  // 耗时统计
+#include <QDialog>         // 信息弹窗
+#include <QPlainTextEdit>  // 可滚动文本
+#include <QVBoxLayout>     // 弹窗布局
+#include <QDialogButtonBox> // 弹窗按钮 
 
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
@@ -734,8 +738,19 @@ void MainWindow::showFullCloudInfo(){
 	// 恢复 cout
 	std::cout.rdbuf(old_buf);
 
-	// ===================== 弹窗显示 =====================
-	QMessageBox::information(this, "完整点云信息", QString::fromStdString(buffer.str()));
+	// ===================== 可滚动弹窗显示 =====================
+	QDialog dlg(this);
+	dlg.setWindowTitle("完整点云信息");
+	dlg.resize(480, 400);
+	auto* layout = new QVBoxLayout(&dlg);
+	auto* text = new QPlainTextEdit(&dlg);
+	text->setReadOnly(true);
+	text->setPlainText(QString::fromStdString(buffer.str()));
+	layout->addWidget(text);
+	auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dlg);
+	connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+	layout->addWidget(buttons);
+	dlg.exec();
 
 }
 
@@ -1242,7 +1257,7 @@ void MainWindow::on_btn_preprocess_clicked()
     }
 
     bool ok = false;
-    double leaf = QInputDialog::getDouble(this, "降采样", "体素大小", 0.01, 0, 10, 4, &ok);
+    double leaf = QInputDialog::getDouble(this, "降采样", "体素大小", 2 * mypcl::computeAveragePointDistance(m_cloud_list[0]), 0, 10, 4, &ok);
     if (!ok) return;
 
     // ===== 后台执行：批量预处理丢进线程池，UI 不卡死 =====
