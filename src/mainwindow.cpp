@@ -39,7 +39,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui.action_load, &QAction::triggered, this, &MainWindow::loadPointCloud);
     connect(ui.action_save, &QAction::triggered, this, &MainWindow::savePointCloud);
     // 点云信息
-    connect(ui.action_showInfo, &QAction::triggered, this, &MainWindow::showCloudInfo);
+    connect(ui.action_showInfo, &QAction::triggered, this, &MainWindow::showFullCloudInfo);
     // 撤销
     connect(ui.action_undo, &QAction::triggered, this, &MainWindow::undoCloudOperation);
 	// 清空
@@ -90,6 +90,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_coarse_watcher, &QFutureWatcher<void>::finished, this, &MainWindow::onCoarseFinished);
     m_fine_watcher = new QFutureWatcher<void>(this);
     connect(m_fine_watcher, &QFutureWatcher<void>::finished, this, &MainWindow::onFineFinished);
+    m_reconstruct_watcher = new QFutureWatcher<void>(this);
+    connect(m_reconstruct_watcher, &QFutureWatcher<void>::finished, this, &MainWindow::onReconstructFinished);
 
     // ========== 多幅点云：拼接与结果可视化 ==========
     connect(ui.btn_Conc, &QPushButton::clicked, this, &MainWindow::concatenateClouds);
@@ -303,12 +305,18 @@ void MainWindow::loadSingleCloud()
 		return;
 	}
 
-	QMessageBox::information(this, "success",
-		QString("load success. size：%1").arg(current_cloud->size())
-	);
+    QMessageBox::information(this, "success",
+        QString("load success. size：%1").arg(current_cloud->size())
+    );
 
-	// 调用你自己的打印信息函数
-	mypcl::printPointCloudBasicInfo(current_cloud);
+    // 记录文件名（简化版信息栏显示用）
+    m_current_filename = QFileInfo(path).fileName();
+
+    // 调用你自己的打印信息函数（暂时注释：加载时不再刷全量日志，信息栏用简化版）
+    // mypcl::printPointCloudBasicInfo(current_cloud);
+
+    // 加载后自动刷新信息栏（简化版）
+    showCloudInfo();
 
 }
 
@@ -669,7 +677,7 @@ void MainWindow::clearData()
 
 
 /**
- * @brief 捕获 mypcl::printPointCloudBasicInfo 的输出，显示到信息栏
+ * @brief 捕获 mypcl::printPointCloudBasicInfoBrief 的输出，显示到信息栏（简化版）
  */
 void MainWindow::showCloudInfo(){
 
@@ -684,8 +692,13 @@ void MainWindow::showCloudInfo(){
 	std::stringstream buffer;
 	std::streambuf* old_buf = std::cout.rdbuf(buffer.rdbuf());
 
-	// 调用你原来的函数（完全不改）
-	mypcl::printPointCloudBasicInfo(current_cloud);
+	// 简化版基本信息（文件名 + 点数 + 宽高 + XYZ范围 + 平均间距）
+	mypcl::printPointCloudBasicInfoBrief(current_cloud, m_current_filename.toStdString());
+	// 附加：法线状态（项目侧判断）
+	if (normal_cloud && !normal_cloud->empty())
+		std::cout << "法线: 已估计" << std::endl;
+	else
+		std::cout << "法线: 未估计" << std::endl;
 
 	// 恢复 cout
 	std::cout.rdbuf(old_buf);
@@ -693,15 +706,36 @@ void MainWindow::showCloudInfo(){
 	// 抓到所有输出内容
 	std::string log_text = buffer.str();
 
-	// ===================== 同时在控制台再打一遍 =====================
-	LOG_INFO("----------------------------------------");
-	LOG_INFO("Printing current point cloud information...");
-	std::cout << log_text << std::endl;
-	LOG_INFO("----------------------------------------");
-
 	// ===================== 显示到 UI 文本框 =====================
 	ui.te_Info->clear();
 	ui.te_Info->append(QString::fromStdString(log_text));
+
+}
+
+/**
+ * @brief 弹窗显示完整点云信息（详细版，含文件名/质心/包围盒/变异系数）
+ */
+void MainWindow::showFullCloudInfo(){
+
+	// 防御检查
+	if (!current_cloud || current_cloud->empty()) {
+		LOG_ERROR("No point cloud available.");
+		QMessageBox::warning(this, "警告", "暂无点云数据！");
+		return;
+	}
+
+	// ===================== 核心：捕获 cout 输出 =====================
+	std::stringstream buffer;
+	std::streambuf* old_buf = std::cout.rdbuf(buffer.rdbuf());
+
+	// 详细版基本信息（含文件名）
+	mypcl::printPointCloudBasicInfo(current_cloud, m_current_filename.toStdString());
+
+	// 恢复 cout
+	std::cout.rdbuf(old_buf);
+
+	// ===================== 弹窗显示 =====================
+	QMessageBox::information(this, "完整点云信息", QString::fromStdString(buffer.str()));
 
 }
 
@@ -795,7 +829,7 @@ void MainWindow::voxelDownSample()
 
     bool ok = false;
     double leaf = QInputDialog::getDouble(this, "参数输入",
-        "请输入体素大小 (默认 0.1)：", 0.1, 0.001, 10.0, 3, &ok);
+        "请输入体素大小 (默认 2×平均间距)：", 2 * mypcl::computeAveragePointDistance(current_cloud), 0.001, 10.0, 4, &ok);
 
     if (!ok) {
         LOG_ERROR("Voxel downsample canceled.");
@@ -820,7 +854,7 @@ void MainWindow::uniformFilter()
 
     bool ok = false;
     double radius = QInputDialog::getDouble(this, "参数输入",
-        "请输入均匀采样半径 (默认 0.1)：", 0.1, 0.001, 10.0, 3, &ok);
+        "请输入均匀采样半径 (默认 2×平均间距)：", 2 * mypcl::computeAveragePointDistance(current_cloud), 0.001, 10.0, 4, &ok);
 
     if (!ok) {
         LOG_ERROR("Uniform sampling canceled.");
@@ -848,8 +882,8 @@ void MainWindow::passThroughFilter()
     if (field.isEmpty()) return;
 
     bool ok1, ok2;
-    float min = QInputDialog::getDouble(this, "最小值", "输入最小值：", -10, -1e6, 1e6, 3, &ok1);
-    float max = QInputDialog::getDouble(this, "最大值", "输入最大值：", 10, -1e6, 1e6, 3, &ok2);
+    float min = QInputDialog::getDouble(this, "最小值", "输入最小值：", -10, -1e6, 1e6, 4, &ok1);
+    float max = QInputDialog::getDouble(this, "最大值", "输入最大值：", 10, -1e6, 1e6, 4, &ok2);
 
     if (!ok1 || !ok2) {
         LOG_ERROR("PassThrough canceled.");
@@ -874,7 +908,7 @@ void MainWindow::statisticalOutlierRemoval()
 
     bool ok1, ok2;
     int k = QInputDialog::getInt(this, "参数", "邻域点数 meanK (默认 30)：", 30, 5, 200, 1, &ok1);
-    double std = QInputDialog::getDouble(this, "参数", "标准差倍数 (默认 1.0)：", 1.0, 0.1, 5.0, 1, &ok2);
+    double std = QInputDialog::getDouble(this, "参数", "标准差倍数 (默认 1.0)：", 1.0, 0.1, 5.0, 4, &ok2);
 
     if (!ok1 || !ok2) {
         LOG_ERROR("Statistical remover canceled.");
@@ -898,7 +932,7 @@ void MainWindow::radiusOutlierRemoval()
     }
 
     bool ok1, ok2;
-    double r = QInputDialog::getDouble(this, "参数", "搜索半径 (默认 1.0)：", 1.0, 0.01, 10, 2, &ok1);
+    double r = QInputDialog::getDouble(this, "参数", "搜索半径 (默认 2×平均间距)：", 2 * mypcl::computeAveragePointDistance(current_cloud), 0.01, 10, 4, &ok1);
     int min = QInputDialog::getInt(this, "参数", "最小邻域点数 (默认 20)：", 20, 1, 200, 1, &ok2);
 
     if (!ok1 || !ok2) {
@@ -924,7 +958,7 @@ void MainWindow::mlsSmoothProcess()
 
     bool ok = false;
     double radius = QInputDialog::getDouble(this, "参数输入",
-        "MLS搜索半径 (默认 0.1)：", 0.1, 0.001, 10.0, 3, &ok);
+        "MLS搜索半径 (默认 2×平均间距)：", 2 * mypcl::computeAveragePointDistance(current_cloud), 0.001, 10.0, 4, &ok);
 
     if (!ok) {
         LOG_ERROR("MLS smooth canceled.");
@@ -962,14 +996,18 @@ void MainWindow::estimateNormal()
 
     bool ok = false;
     double radius = QInputDialog::getDouble(this, "参数输入",
-        "法向量搜索半径 (默认 0.1)：", 0.1, 0.001, 10.0, 3, &ok);
+        "法向量搜索半径 (默认 2×平均间距)：", 2 * mypcl::computeAveragePointDistance(current_cloud), 0.001, 10.0, 4, &ok);
 
     if (!ok) {
         LOG_ERROR("Normal estimation canceled.");
         return;
     }
 
+    QElapsedTimer timer;
+    timer.start();
     mypcl::computeNormals(current_cloud, normal_cloud, radius);
+    LOG_INFO("法向量估计耗时: " << timer.elapsed() << " ms");
+    showCloudInfo(); // 自动刷新信息（法线状态变化）
 }
 
 /**
@@ -1015,7 +1053,10 @@ void MainWindow::evaluateNormalDisorder()
         QMessageBox::warning(this, "警告", "请先加载点云并计算法线！");
         return;
     }
+    QElapsedTimer timer;
+    timer.start();
     double chaos = mypcl::evaluateNormalChaos(normal_cloud, current_cloud);
+    LOG_INFO("法线混乱度评估耗时: " << timer.elapsed() << " ms");  // score 库内 evaluateNormalChaos 已 LOG，此处不重复
 }
 
 // =============== 表面重建 ===============
@@ -1032,7 +1073,7 @@ void MainWindow::greedyProjectionTriangulation()
 
     bool ok = false;
     double radius = QInputDialog::getDouble(this, "参数输入",
-        "贪婪投影搜索半径 (默认 0.25)：", 0.25, 0.01, 10.0, 3, &ok);
+        "贪婪投影搜索半径 (默认 0.25)：", 0.25, 0.01, 10.0, 4, &ok);
 
     if (!ok) {
         LOG_ERROR("Greedy projection canceled.");
@@ -1041,7 +1082,36 @@ void MainWindow::greedyProjectionTriangulation()
 
     // 初始化网格
     if (!mesh) mesh.reset(new pcl::PolygonMesh);
-    mypcl::greedyProjectionTriangulation(current_cloud, normal_cloud, mesh, radius);
+
+    // ===== 后台执行：贪婪投影三角化丢进线程池，UI 不卡死 =====
+    m_busy_running = true;
+    setBusyUI(true, true);   // 重建任务：单点云按钮也禁用（重建读写 current_cloud/normals/mesh）
+
+    m_reconstruct_watcher->setFuture(QtConcurrent::run([this, radius]() {
+        try {
+            QElapsedTimer timer;
+            timer.start();
+            mypcl::greedyProjectionTriangulation(current_cloud, normal_cloud, mesh, radius);
+            LOG_INFO("贪婪投影三角化耗时: " << timer.elapsed() << " ms");
+        }
+        catch (const std::exception& e) {
+            LOG_ERROR("贪婪投影三角化异常: " << e.what());
+        }
+        catch (...) {
+            LOG_ERROR("贪婪投影三角化异常: 未知错误");
+        }
+    }));
+    // 完成回调 onReconstructFinished() 由 watcher 在【主线程】发射
+}
+
+/**
+ * @brief 重建完成回调（主线程执行）：恢复按钮 + 提示
+ */
+void MainWindow::onReconstructFinished()
+{
+    m_busy_running = false;
+    setBusyUI(false, false);
+    QMessageBox::information(this, "完成", "重建完成！");
 }
 
 /**
@@ -1064,7 +1134,26 @@ void MainWindow::poissonReconstruction()
     }
 
     if (!mesh) mesh.reset(new pcl::PolygonMesh);
-    mypcl::poissonReconstruction(current_cloud, normal_cloud, mesh, depth);
+
+    // ===== 后台执行：泊松重建丢进线程池，UI 不卡死 =====
+    m_busy_running = true;
+    setBusyUI(true, true);   // 重建任务：单点云按钮也禁用
+
+    m_reconstruct_watcher->setFuture(QtConcurrent::run([this, depth]() {
+        try {
+            QElapsedTimer timer;
+            timer.start();
+            mypcl::poissonReconstruction(current_cloud, normal_cloud, mesh, depth);
+            LOG_INFO("泊松重建耗时: " << timer.elapsed() << " ms");
+        }
+        catch (const std::exception& e) {
+            LOG_ERROR("泊松重建异常: " << e.what());
+        }
+        catch (...) {
+            LOG_ERROR("泊松重建异常: 未知错误");
+        }
+    }));
+    // 完成回调 onReconstructFinished() 由 watcher 在【主线程】发射
 }
 
 /**
@@ -1078,7 +1167,10 @@ void MainWindow::evaluateReconstructionError()
         return;
     }
  
+    QElapsedTimer timer;
+    timer.start();
     double error = mypcl::computeReconstructionError(current_cloud, mesh, "point");
+    LOG_INFO("重建质量评估耗时: " << timer.elapsed() << " ms");  // 误差值库内 computeReconstructionError 已 LOG，此处不重复
 }
 
 // ======================其他======================
@@ -1150,7 +1242,7 @@ void MainWindow::on_btn_preprocess_clicked()
     }
 
     bool ok = false;
-    double leaf = QInputDialog::getDouble(this, "降采样", "体素大小", 0.01, 0, 10, 3, &ok);
+    double leaf = QInputDialog::getDouble(this, "降采样", "体素大小", 0.01, 0, 10, 4, &ok);
     if (!ok) return;
 
     // ===== 后台执行：批量预处理丢进线程池，UI 不卡死 =====
@@ -1227,9 +1319,9 @@ void MainWindow::on_btn_coarse_clicked()
 
     bool ok1, ok2;
     double fpfh_r = QInputDialog::getDouble(this, "FPFH半径", "FPFH半径", 
-        5*mypcl::computeAveragePointDistance(m_cloud_list[0]), 0, 10, 3, &ok1);
+        5*mypcl::computeAveragePointDistance(m_cloud_list[0]), 0, 10, 4, &ok1);
     double sac_r = QInputDialog::getDouble(this, "SAC半径", "SAC半径", 
-        10 * mypcl::computeAveragePointDistance(m_cloud_list[0]), 0, 10, 3, &ok2);
+        10 * mypcl::computeAveragePointDistance(m_cloud_list[0]), 0, 10, 4, &ok2);
     if (!ok1 || !ok2) return;
 
     // ===== 后台执行：粗配准丢进 QtConcurrent 线程池，UI 不再卡死 =====
@@ -1285,7 +1377,7 @@ void MainWindow::onCoarseFinished()
  * 会与工作线程产生数据竞争，运行期间必须禁用；单点云处理按钮
  * （操作 m_current_cloud，与配准无关）保持可用。
  */
-void MainWindow::setBusyUI(bool busy)
+void MainWindow::setBusyUI(bool busy, bool disable_single)
 {
     ui.action_load->setEnabled(!busy);
     ui.action_clear->setEnabled(!busy);
@@ -1298,6 +1390,30 @@ void MainWindow::setBusyUI(bool busy)
     ui.btn_showReg_coarse->setEnabled(!busy);
     ui.btn_showReg_fine->setEnabled(!busy);
     ui.listWidget_multi->setEnabled(!busy);
+
+    // 单点云组（重建等单点云后台任务期间禁用；恢复时总恢复）
+    // 配准类后台任务（disable_single=false）时单点云按钮保持可用
+    if (disable_single || !busy)
+    {
+        ui.btn_removeNaN->setEnabled(!busy);
+        ui.btn_voxel->setEnabled(!busy);
+        ui.btn_uniform->setEnabled(!busy);
+        ui.btn_staticsRemove->setEnabled(!busy);
+        ui.btn_radiusRemove->setEnabled(!busy);
+        ui.btn_passthrough->setEnabled(!busy);
+        ui.btn_mls->setEnabled(!busy);
+        ui.btn_normalsAlign->setEnabled(!busy);
+        ui.btn_NE->setEnabled(!busy);
+        ui.btn_flipNormal->setEnabled(!busy);
+        ui.btn_normalsChaos->setEnabled(!busy);
+        ui.btn_greedy->setEnabled(!busy);
+        ui.btn_poisson->setEnabled(!busy);
+        ui.btn_reconError->setEnabled(!busy);
+        ui.btn_showCloud->setEnabled(!busy);
+        ui.btn_showNormal->setEnabled(!busy);
+        ui.btn_showMesh->setEnabled(!busy);
+        ui.action_showInfo->setEnabled(!busy);
+    }
 }
 
 // 多幅精配准
@@ -1318,9 +1434,9 @@ void MainWindow::on_btn_fine_clicked()
     }
 
     bool ok1, ok2;
-    double max_d = QInputDialog::getDouble(this, "ICP最大距离", "ICP最大距离", 1.0, 0, 10, 3, &ok1);
+    double max_d = QInputDialog::getDouble(this, "ICP最大距离", "ICP最大距离", 1.0, 0, 10, 4, &ok1);
     double leaf = QInputDialog::getDouble(this, "体素大小", "体素大小",
-        mypcl::computeAveragePointDistance(m_cloud_list[0]), 0.01, 1, 2, &ok2);
+        mypcl::computeAveragePointDistance(m_cloud_list[0]), 0.01, 1, 4, &ok2);
     if (!ok1 || !ok2) return;
 
     // ===== 后台执行：精配准丢进线程池，UI 不卡死 =====

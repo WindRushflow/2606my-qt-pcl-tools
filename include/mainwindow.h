@@ -86,7 +86,8 @@ public:
     void undoCloudOperation();           // 撤销上一次点云操作
     void clearData();                    // 清空所有点云数据
     void centerView();                   // 居中显示（TODO: 待实现）
-    void showCloudInfo();                // 显示点云基本信息到信息栏
+    void showCloudInfo();                // 显示点云基本信息到信息栏（简化版）
+    void showFullCloudInfo();            // 弹窗显示完整点云信息（详细版）
     void showFullLog();                  // 弹窗显示完整运行日志
     void showIntroduction();             // 弹窗显示软件使用说明
 
@@ -124,6 +125,7 @@ public:
     void onCoarseFinished();             // 粗配准后台执行完成回调（主线程）
     void onPreprocessFinished();         // 批量预处理后台执行完成回调（主线程）
     void onFineFinished();               // 精配准后台执行完成回调（主线程）
+    void onReconstructFinished();        // 重建（贪婪/泊松）后台执行完成回调（主线程）
 
 #pragma endregion
 
@@ -173,6 +175,7 @@ private:
 
     // ==== 全局数据 ====
     PointCloudPtr current_cloud;           // 当前点云
+    QString m_current_filename;            // 当前点云文件名（简化版信息栏显示用）
     NormalCloudPtr normal_cloud;           // 法向量
     PolygonMeshPtr mesh;                   // 网格（重建用）
 
@@ -194,8 +197,9 @@ private:
     QFutureWatcher<void>* m_preprocess_watcher = nullptr; // 预处理 future 监听器
     QFutureWatcher<void>* m_coarse_watcher = nullptr;     // 粗配准 future 监听器
     QFutureWatcher<void>* m_fine_watcher = nullptr;       // 精配准 future 监听器
+    QFutureWatcher<void>* m_reconstruct_watcher = nullptr; // 重建（贪婪/泊松）future 监听器
     std::atomic<bool> m_busy_running{ false };            // 任一后台任务正在执行
-    void setBusyUI(bool busy);                        // 任务期间禁用共享数据相关控件
+    void setBusyUI(bool busy, bool disable_single = false); // 任务期间禁用控件；disable_single=重建等单点云任务(连单点云按钮也禁)
 
 protected:
     //void showEvent(QShowEvent* event) override;
